@@ -1,4 +1,4 @@
-import { AbsoluteFill, Sequence, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, Sequence } from 'remotion';
 
 export type TrivialBeat = {
   overlay_text: string;
