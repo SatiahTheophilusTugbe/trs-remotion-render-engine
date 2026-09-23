@@ -1,5 +1,6 @@
 // api/submit-render.ts
 import { renderMediaOnLambda } from '@remotion/lambda/client';
+import type { AwsRegion } from '@remotion/lambda/client';
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
@@ -9,7 +10,7 @@ export default async function handler(req: Request): Promise<Response> {
   const { compositionId, inputProps } = await req.json();
 
   const { renderId, bucketName } = await renderMediaOnLambda({
-    region: process.env.REMOTION_REGION!,
+    region: process.env.REMOTION_REGION! as AwsRegion,
     functionName: process.env.REMOTION_FUNCTION_NAME!,
     serveUrl: process.env.REMOTION_SERVE_URL!,
     composition: compositionId,

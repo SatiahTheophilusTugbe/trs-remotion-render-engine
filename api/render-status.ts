@@ -1,5 +1,6 @@
 // api/render-status.ts
 import { getRenderProgress } from '@remotion/lambda/client';
+import type { AwsRegion } from '@remotion/lambda/client';
 
 export const config = { runtime: 'nodejs' };
 
@@ -16,7 +17,7 @@ export default async function handler(req: Request): Promise<Response> {
     renderId,
     bucketName,
     functionName: process.env.REMOTION_FUNCTION_NAME!,
-    region: process.env.REMOTION_REGION!,
+    region: process.env.REMOTION_REGION! as AwsRegion,
   });
 
   if (progress.fatalErrorEncountered) {
