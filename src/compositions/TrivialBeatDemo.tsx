@@ -1,4 +1,5 @@
 import { AbsoluteFill, Sequence } from 'remotion';
+import { framesForBeat } from '../lib/duration';
 
 export type TrivialBeat = {
   overlay_text: string;
@@ -14,7 +15,7 @@ export const TrivialBeatDemo: React.FC<{ beats: TrivialBeat[]; fps: number }> = 
   return (
     <AbsoluteFill style={{ backgroundColor: '#0B0B0B' }}>
       {beats.map((beat) => {
-        const durationInFrames = Math.round(beat.duration_sec * fps);
+        const durationInFrames = framesForBeat(beat, fps);
         const from = frameCursor;
         frameCursor += durationInFrames;
         return (

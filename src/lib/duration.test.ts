@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { framesForBeats } from './duration';
+import { framesForBeats, framesForBeat } from './duration';
 
 describe('framesForBeats', () => {
   it('sums beat durations and converts to frames at the given fps', () => {
@@ -18,5 +18,17 @@ describe('framesForBeats', () => {
 
   it('returns 0 for an empty beat array', () => {
     expect(framesForBeats([], 30)).toBe(0);
+  });
+
+  it('matches the sum of per-beat rounding for fractional durations (no cross-rounding drift)', () => {
+    const beats = [
+      { duration_sec: 1.01 },
+      { duration_sec: 1.01 },
+      { duration_sec: 2.34 },
+      { duration_sec: 0.86 },
+    ];
+    const fps = 30;
+    const expectedTotal = beats.reduce((sum, beat) => sum + framesForBeat(beat, fps), 0);
+    expect(framesForBeats(beats, fps)).toBe(expectedTotal);
   });
 });
