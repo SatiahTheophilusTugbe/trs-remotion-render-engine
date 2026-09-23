@@ -2,7 +2,7 @@
   "name": "trs-remotion-render-engine",
   "version": "1.0.0",
   "type": "module",
-  "description": "My Remotion video",
+  "description": "TRS Avatar Video Remotion render engine — Lambda + Vercel API surface",
   "repository": {},
   "license": "UNLICENSED",
   "private": true,

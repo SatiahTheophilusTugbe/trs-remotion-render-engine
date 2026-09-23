@@ -1,54 +1,50 @@
-# Remotion video
+# TRS Remotion Render Engine
 
-<p align="center">
-  <a href="https://github.com/remotion-dev/logo">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/remotion-dev/logo/raw/main/animated-logo-banner-dark.apng">
-      <img alt="Animated Remotion Logo" src="https://github.com/remotion-dev/logo/raw/main/animated-logo-banner-light.gif">
-    </picture>
-  </a>
-</p>
+The Remotion render engine for ThirdRailSports' Avatar Video pipeline. Compositions
+render on AWS Lambda via `@remotion/lambda`, and a thin Vercel API surface exposes
+render submission and polling so n8n workflows can drive renders without touching
+AWS directly.
 
-Welcome to your Remotion project!
+## API
 
-## Commands
+**`POST /api/submit-render`**
+Request: `{ compositionId: string, inputProps: object }`
+Response: `{ render_id: string, bucket_name: string }`
 
-**Install Dependencies**
+**`GET /api/render-status?render_id=<id>&bucket_name=<bucket>`**
+Response: `{ status: 'rendering' | 'done' | 'failed', progress: number, render_url: string | null }`
 
-```console
-npm i
+See `api/submit-render.ts` and `api/render-status.ts` for the implementation.
+
+## Environment variables
+
+Five env vars are required, both locally and on Vercel:
+
+- `REMOTION_AWS_ACCESS_KEY_ID` / `REMOTION_AWS_SECRET_ACCESS_KEY` — AWS credentials with Lambda render access. Copy `.env.example` to `.env` for local dev and fill in real values (never commit `.env`).
+- `REMOTION_REGION`, `REMOTION_FUNCTION_NAME`, `REMOTION_SERVE_URL` — must match the currently deployed Lambda function and site. Real values live in `deploy-manifest.json` (`region`, `functionName`, `serveUrl`).
+
+The same 5 variables must be set on Vercel (`vercel env add <NAME>`) for the deployed API to work. Deployment location: `apiBaseUrl` and `vercelProject` in `deploy-manifest.json`.
+
+## Redeploying the Lambda site
+
+```
+npx remotion lambda sites create src/index.ts --site-name=<name>
 ```
 
-**Start Preview**
+**Before you redeploy:** re-running this with the *same* `--site-name` overwrites the
+existing S3 content at that URL in place — the URL is keyed on the site name you pass,
+not a content hash. `deploy-manifest.json`'s `serveUrl` and the Vercel
+`REMOTION_SERVE_URL` env var must be updated together whenever the site is redeployed
+under a new name, or the two will silently drift apart (API renders against a stale or
+mismatched site). If you redeploy under the same name to intentionally update the live
+site in place, no URL changes are needed — but double-check `serveUrl` in
+`deploy-manifest.json` still matches reality.
 
-```console
-npm run dev
+## Redeploying the API
+
+```
+npx vercel --prod
 ```
 
-**Render video**
-
-```console
-npx remotion render
-```
-
-**Upgrade Remotion**
-
-```console
-npx remotion upgrade
-```
-
-## Docs
-
-Get started with Remotion by reading the [fundamentals page](https://www.remotion.dev/docs/the-fundamentals).
-
-## Help
-
-We provide help on our [Discord server](https://discord.gg/6VzzNDwUwV).
-
-## Issues
-
-Found an issue with Remotion? [File an issue here](https://github.com/remotion-dev/remotion/issues/new).
-
-## License
-
-Note that for some entities a company license is needed. [Read the terms here](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md).
+Run `vercel env add <NAME>` first for any env var that changed, then redeploy so the
+new values take effect.
