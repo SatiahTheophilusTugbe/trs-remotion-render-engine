@@ -4,8 +4,8 @@ import type { AwsRegion } from '@remotion/lambda/client';
 
 export const config = { runtime: 'nodejs' };
 
-export default async function handler(req: Request): Promise<Response> {
-  const url = new URL(req.url);
+export async function GET(request: Request): Promise<Response> {
+  const url = new URL(request.url);
   const renderId = url.searchParams.get('render_id');
   const bucketName = url.searchParams.get('bucket_name');
 

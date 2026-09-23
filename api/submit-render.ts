@@ -2,12 +2,8 @@
 import { renderMediaOnLambda } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
-  }
-
-  const { compositionId, inputProps } = await req.json();
+export async function POST(request: Request): Promise<Response> {
+  const { compositionId, inputProps } = await request.json();
 
   const { renderId, bucketName } = await renderMediaOnLambda({
     region: process.env.REMOTION_REGION! as AwsRegion,
