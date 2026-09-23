@@ -1,6 +1,7 @@
 {
   "name": "trs-remotion-render-engine",
   "version": "1.0.0",
+  "type": "module",
   "description": "My Remotion video",
   "repository": {},
   "license": "UNLICENSED",
