@@ -16,6 +16,28 @@ Response: `{ status: 'rendering' | 'done' | 'failed', progress: number, render_u
 
 See `api/submit-render.ts` and `api/render-status.ts` for the implementation.
 
+### Example: `BeatSequence` request
+
+The real composition rendered on Lambda is `BeatSequence` (`AvatarBeat` + `BrollBeat`,
+assembled dynamically from a `beats` array). Example `submit-render` request body:
+
+```json
+{
+  "compositionId": "BeatSequence",
+  "inputProps": {
+    "beats": [
+      { "type": "avatar", "photo_url": "https://example.com/avatar-frame.jpg", "clip_url": "https://example.com/avatar-clip.mp4", "overlay_text": "", "narration_line": "Welcome back to Third Rail Sports.", "duration_sec": 5, "beat_index": 0 },
+      { "type": "broll", "photo_url": "https://example.com/broll-photo.jpg", "audio_url": "https://example.com/narration.mp3", "overlay_text": "REAL MADRID WIN", "narration_line": "Real Madrid took all three points.", "duration_sec": 4, "beat_index": 1 }
+    ],
+    "fps": 30
+  }
+}
+```
+
+`beats` is an array of `Beat` (see `src/types/beat.ts`) — `type: 'avatar'` beats use
+`clip_url`, `type: 'broll'` beats use `audio_url` (Ken Burns effect over `photo_url`).
+`fps` must match the frame rate the composition should render at.
+
 ## Environment variables
 
 Six env vars are required, both locally and on Vercel:
