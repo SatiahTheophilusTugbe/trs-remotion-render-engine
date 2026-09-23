@@ -1,7 +1,7 @@
 // api/render-status.ts
 import { getRenderProgress } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
-import { isAuthorized, unauthorizedResponse } from './_auth';
+import { isAuthorized, unauthorizedResponse } from './auth';
 
 export const config = { runtime: 'nodejs' };
 

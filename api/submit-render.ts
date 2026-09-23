@@ -1,7 +1,7 @@
 // api/submit-render.ts
 import { renderMediaOnLambda } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
-import { isAuthorized, unauthorizedResponse } from './_auth';
+import { isAuthorized, unauthorizedResponse } from './auth';
 
 export async function POST(request: Request): Promise<Response> {
   if (!isAuthorized(request)) {
