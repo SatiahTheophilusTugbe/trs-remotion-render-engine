@@ -1,6 +1,7 @@
 import { Composition } from 'remotion';
 import { TrivialBeatDemo, TrivialBeat } from './compositions/TrivialBeatDemo';
 import { AvatarBeat } from './compositions/AvatarBeat';
+import { BrollBeat } from './compositions/BrollBeat';
 import type { Beat } from './types/beat';
 import { framesForBeats } from './lib/duration';
 
@@ -20,6 +21,17 @@ const avatarSmokeBeat: Beat = {
   overlay_text: '',
   narration_line: '',
   duration_sec: 5,
+  beat_index: 0,
+};
+
+const brollSmokeBeat: Beat = {
+  type: 'broll',
+  photo_url:
+    'https://www.aljazeera.com/wp-content/uploads/2026/08/AFP__20260826__C6KX2G4__v2__MidRes__FblEspLigaRealMadridRealSociedad-1787778745.jpg?resize=770%2C513&quality=80',
+  audio_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+  overlay_text: 'REAL BROLL BEAT PROOF',
+  narration_line: '',
+  duration_sec: 4,
   beat_index: 0,
 };
 
@@ -45,6 +57,14 @@ export const RemotionRoot: React.FC = () => {
         width={1080}
         height={1920}
         durationInFrames={150}
+      />
+      <Composition
+        id="BrollBeatSmoke"
+        component={() => <BrollBeat beat={brollSmokeBeat} fps={30} />}
+        fps={30}
+        width={1080}
+        height={1920}
+        durationInFrames={120}
       />
     </>
   );
