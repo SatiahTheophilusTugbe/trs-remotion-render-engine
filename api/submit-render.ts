@@ -1,11 +1,11 @@
 // api/submit-render.ts
 import { renderMediaOnLambda } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
-import { isAuthorized, unauthorizedResponse } from './auth';
 
 export async function POST(request: Request): Promise<Response> {
-  if (!isAuthorized(request)) {
-    return unauthorizedResponse();
+  const key = request.headers.get('x-trs-render-key');
+  if (!key || key !== process.env.TRS_RENDER_API_KEY) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { compositionId, inputProps } = await request.json();

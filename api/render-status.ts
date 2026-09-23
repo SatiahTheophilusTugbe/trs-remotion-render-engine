@@ -1,13 +1,13 @@
 // api/render-status.ts
 import { getRenderProgress } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
-import { isAuthorized, unauthorizedResponse } from './auth';
 
 export const config = { runtime: 'nodejs' };
 
 export async function GET(request: Request): Promise<Response> {
-  if (!isAuthorized(request)) {
-    return unauthorizedResponse();
+  const key = request.headers.get('x-trs-render-key');
+  if (!key || key !== process.env.TRS_RENDER_API_KEY) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const url = new URL(request.url);
