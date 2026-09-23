@@ -18,12 +18,13 @@ See `api/submit-render.ts` and `api/render-status.ts` for the implementation.
 
 ## Environment variables
 
-Five env vars are required, both locally and on Vercel:
+Six env vars are required, both locally and on Vercel:
 
 - `REMOTION_AWS_ACCESS_KEY_ID` / `REMOTION_AWS_SECRET_ACCESS_KEY` — AWS credentials with Lambda render access. Copy `.env.example` to `.env` for local dev and fill in real values (never commit `.env`).
 - `REMOTION_REGION`, `REMOTION_FUNCTION_NAME`, `REMOTION_SERVE_URL` — must match the currently deployed Lambda function and site. Real values live in `deploy-manifest.json` (`region`, `functionName`, `serveUrl`).
+- `TRS_RENDER_API_KEY` — shared secret required on every request to both `/api/submit-render` and `/api/render-status`. The caller (eventually n8n) must send it as the `x-trs-render-key` header; requests missing it or sending the wrong value get a `401` before either endpoint touches AWS/Lambda.
 
-The same 5 variables must be set on Vercel (`vercel env add <NAME>`) for the deployed API to work. Deployment location: `apiBaseUrl` and `vercelProject` in `deploy-manifest.json`.
+The same 6 variables must be set on Vercel (`vercel env add <NAME>`) for the deployed API to work. Deployment location: `apiBaseUrl` and `vercelProject` in `deploy-manifest.json`.
 
 ## Redeploying the Lambda site
 

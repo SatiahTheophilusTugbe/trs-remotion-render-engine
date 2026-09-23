@@ -1,8 +1,13 @@
 // api/submit-render.ts
 import { renderMediaOnLambda } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
+import { isAuthorized, unauthorizedResponse } from './_auth';
 
 export async function POST(request: Request): Promise<Response> {
+  if (!isAuthorized(request)) {
+    return unauthorizedResponse();
+  }
+
   const { compositionId, inputProps } = await request.json();
 
   const { renderId, bucketName } = await renderMediaOnLambda({
