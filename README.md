@@ -8,11 +8,18 @@ AWS directly.
 ## API
 
 **`POST /api/submit-render`**
-Request: `{ compositionId: string, inputProps: object }`
+Request: `{ compositionId: string, inputProps: object, framesPerLambda?: number }`
 Response: `{ render_id: string, bucket_name: string }`
 
 **`GET /api/render-status?render_id=<id>&bucket_name=<bucket>`**
-Response: `{ status: 'rendering' | 'done' | 'failed', progress: number, render_url: string | null }`
+Response: `{ status: 'rendering' | 'done' | 'failed', progress: number, render_url: string | null }`.
+When `status` is `failed`, the response also carries `error: { type, is_fatal, message } | null`
+(`message` is the first line of the underlying error only, never a stack trace).
+
+`framesPerLambda` (optional, integer, minimum 5) sets how many frames each Lambda chunk
+renders: fewer, larger chunks mean fewer parallel Lambda invocations but a slower render,
+bounded by the function's 120s timeout. Omit it to use Remotion's default chunking. A
+value that is not an integer of at least 5 returns `400` before Lambda is called.
 
 See `api/submit-render.ts` and `api/render-status.ts` for the implementation.
 
@@ -43,7 +50,28 @@ submit call still returns a valid `render_id`, but the render then fails on unfe
 `beats` is an array of `Beat` (see `src/types/beat.ts`). `photo_url` is read by both beat
 types. `clip_url` is read only by `avatar` beats (required for them); `audio_url` is read
 only by `broll` beats (optional; a Ken Burns effect runs over `photo_url`).
-`fps` must match the frame rate the composition should render at.
+`fps` must be `30` with the currently deployed site (known issue; will be fixed with the
+next site redeploy): the composition renders at a fixed 30fps and `fps` only sizes the
+timeline, so any other value silently truncates content (e.g. 25 turns a 9s story into 7.5s).
+
+## Lambda concurrency
+
+With the default 20 frames per chunk, a render needs `ceil(frames/20) + 1` Lambda
+invocations. The AWS account's concurrent-execution limit is currently 10 (a quota
+increase has been requested and was pending at the time of writing), so long videos need
+either the quota increase or a larger `framesPerLambda`. Failure symptom: status `failed`
+with an error message starting `AWS Concurrency limit reached`.
+
+## Testing a render directly on Lambda
+
+```
+node --env-file=.env scripts/test-render.mjs [short|full]
+```
+
+Renders the real `BeatSequence` composition straight on Lambda, bypassing the Vercel API.
+`short` (default) is a 2s avatar + 2s broll beat with default chunking; `full` is a 5s +
+4s (270 frame) render using `framesPerLambda: 45` to stay under the concurrency limit.
+Prints the final output URL on success or `progress.errors` on failure.
 
 ## Environment variables
 
