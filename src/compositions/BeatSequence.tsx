@@ -2,6 +2,7 @@ import { AbsoluteFill, Sequence, useVideoConfig } from 'remotion';
 import type { Beat } from '../types/beat';
 import { AvatarBeat } from './AvatarBeat';
 import { BrollBeat } from './BrollBeat';
+import { StatRevealBeat } from './StatRevealBeat';
 import { layoutBeats } from '../lib/layout';
 import { parseWordTimings } from '../lib/captions';
 import { OverlayBanner } from './OverlayBanner';
@@ -16,7 +17,7 @@ const renderBeat = (beat: Beat, fps: number) => {
     case 'broll':
       return <BrollBeat beat={beat} fps={fps} />;
     case 'stat':
-      throw new Error('stat beats not implemented yet');
+      return <StatRevealBeat beat={beat} />;
     default: {
       const unreachable: never = beat;
       throw new Error(`Unknown beat type: ${String((unreachable as { type?: string }).type)}`);
@@ -45,10 +46,9 @@ export const BeatSequence: React.FC<{
             {renderBeat(beat, fps)}
             {beat.type === 'broll' && beat.overlay_text ? <OverlayBanner text={beat.overlay_text} /> : null}
             {(() => {
-              if (beat.type === 'stat') return null; // stat captions: decided in Task 2
               const words = parseWordTimings(beat.word_timings);
-              const show = words.length > 0 && (beat.type === 'broll' || CAPTIONS_ON_AVATAR);
-              return show ? <CaptionLayer words={words} variant={beat.type} /> : null;
+              const show = words.length > 0 && (beat.type !== 'avatar' || CAPTIONS_ON_AVATAR);
+              return show ? <CaptionLayer words={words} variant={beat.type === 'avatar' ? 'avatar' : 'broll'} /> : null;
             })()}
           </Sequence>
         );
