@@ -50,9 +50,27 @@ submit call still returns a valid `render_id`, but the render then fails on unfe
 `beats` is an array of `Beat` (see `src/types/beat.ts`). `photo_url` is read by both beat
 types. `clip_url` is read only by `avatar` beats (required for them); `audio_url` is read
 only by `broll` beats (optional; a Ken Burns effect runs over `photo_url`).
-`fps` must be `30` with the currently deployed site (known issue; will be fixed with the
-next site redeploy): the composition renders at a fixed 30fps and `fps` only sizes the
-timeline, so any other value silently truncates content (e.g. 25 turns a 9s story into 7.5s).
+`fps` is honored: the composition's timeline length is derived from the beats' `duration_sec`
+at the requested `fps` (default 30).
+
+### Optional inputs and caption / banner / badge / music behavior
+
+`BeatSequence` also accepts two optional top-level inputs:
+
+- `leagueBadge` (string, e.g. `"NBA"`): shown as a badge in the top-right corner for the whole video. Omitted or empty = no league badge.
+- `musicUrl` (string URL): a music bed played under the whole video, looped, at a low volume (0.045 peak) with a 1s fade-in and 1s fade-out over the total video length. Omitted or empty = no music.
+
+Each beat may carry `word_timings`: either a JSON string or an array of
+`{ word: string, start: number, end: number }` with `start`/`end` in seconds **relative to
+the start of that beat**. Invalid or unparseable values are ignored (no captions for that beat).
+
+What is rendered:
+
+- **Captions:** words are shown four at a time (a fixed pager) in bold Montserrat, white with a black stroke; the currently spoken word is highlighted lime (`#CCFF00`). Captions are drawn on both `broll` and `avatar` beats when `word_timings` is present, and disappear during gaps between word pages. On broll beats they sit near the bottom; on avatar beats they sit above the corner avatar box.
+- **Banner:** a `broll` beat's `overlay_text` is shown as a banner near the top (below the badge row) for the first 4 seconds of that beat only. Avatar beats do not show a banner.
+- **Badges:** a `THIRD RAIL SPORTS` badge in the top-left on every frame, plus the optional `leagueBadge` in the top-right.
+- **Music:** see `musicUrl` above.
+- `photo_url` may be `null`; backgrounds tolerate a missing photo.
 
 ## Lambda concurrency
 
