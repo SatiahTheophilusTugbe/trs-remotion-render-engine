@@ -1,7 +1,7 @@
 // Live-API proof: submit the real-story payload through the deployed Vercel API, poll, download.
 // Usage (PowerShell):
 //   $env:TRS_RENDER_API_KEY = Read-Host   # paste key, not echoed to chat
-//   node scripts/build-real-props.mjs --music > out/live-props.json
+//   node scripts/build-real-props.mjs --music | Out-File -Encoding utf8 out/live-props.json   (or any encoding; script handles UTF-16)
 //   node scripts/live-proof.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 
@@ -13,7 +13,10 @@ if (!key) {
 
 const manifest = JSON.parse(readFileSync('deploy-manifest.json', 'utf8'));
 const base = manifest.apiBaseUrl;
-const inputProps = JSON.parse(readFileSync('out/live-props.json', 'utf8'));
+// PowerShell 5.1 `>` writes UTF-16 LE with a BOM; accept that as well as UTF-8.
+const raw = readFileSync('out/live-props.json');
+const text = raw[0] === 0xff && raw[1] === 0xfe ? raw.toString('utf16le') : raw.toString('utf8');
+const inputProps = JSON.parse(text.replace(/^﻿/, ''));
 const headers = { 'content-type': 'application/json', 'x-trs-render-key': key };
 
 const submit = await fetch(`${base}/api/submit-render`, {
