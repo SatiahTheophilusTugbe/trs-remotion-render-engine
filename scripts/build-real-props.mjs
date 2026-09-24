@@ -1,5 +1,5 @@
 // usage: node scripts/build-real-props.mjs > out/real-props.json
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const fixture = JSON.parse(readFileSync(new URL('../src/fixtures/real-story-ballmer.json', import.meta.url)));
 const avatar = fixture.find((b) => b.type === 'avatar');
@@ -24,4 +24,7 @@ const props = {
     { ...avatar, beat_index: 1, photo_url: media.avatarPhoto, clip_url: media.avatarClipStandin },
   ],
 };
-process.stdout.write(JSON.stringify(props, null, 2));
+const json = JSON.stringify(props, null, 2);
+const outIdx = process.argv.indexOf('--out');
+if (outIdx !== -1) writeFileSync(process.argv[outIdx + 1], json, 'utf8');
+else process.stdout.write(json);

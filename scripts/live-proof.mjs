@@ -1,7 +1,7 @@
 // Live-API proof: submit the real-story payload through the deployed Vercel API, poll, download.
 // Usage (PowerShell):
 //   $env:TRS_RENDER_API_KEY = Read-Host   # paste key, not echoed to chat
-//   node scripts/build-real-props.mjs --music | Out-File -Encoding utf8 out/live-props.json   (or any encoding; script handles UTF-16)
+//   node scripts/build-real-props.mjs --music --out out/live-props.json
 //   node scripts/live-proof.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 
