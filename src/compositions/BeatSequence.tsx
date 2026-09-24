@@ -4,6 +4,9 @@ import { AvatarBeat } from './AvatarBeat';
 import { BrollBeat } from './BrollBeat';
 import { framesForBeat } from '../lib/duration';
 import { parseWordTimings } from '../lib/captions';
+import { OverlayBanner } from './OverlayBanner';
+import { BrandBadges } from './BrandBadges';
+import { MusicBed } from './MusicBed';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from './CaptionLayer';
 
 const renderBeat = (beat: Beat, fps: number) => {
@@ -19,7 +22,12 @@ const renderBeat = (beat: Beat, fps: number) => {
   }
 };
 
-export const BeatSequence: React.FC<{ beats: Beat[]; fps: number }> = ({ beats, fps }) => {
+export const BeatSequence: React.FC<{
+  beats: Beat[];
+  fps: number;
+  leagueBadge?: string | null;
+  musicUrl?: string | null;
+}> = ({ beats, fps, leagueBadge, musicUrl }) => {
   let frameCursor = 0;
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
@@ -30,6 +38,7 @@ export const BeatSequence: React.FC<{ beats: Beat[]; fps: number }> = ({ beats, 
         return (
           <Sequence key={beat.beat_index} from={from} durationInFrames={durationInFrames}>
             {renderBeat(beat, fps)}
+            {beat.type === 'broll' && beat.overlay_text ? <OverlayBanner text={beat.overlay_text} /> : null}
             {(() => {
               const words = parseWordTimings(beat.word_timings);
               const show = words.length > 0 && (beat.type === 'broll' || CAPTIONS_ON_AVATAR);
@@ -38,6 +47,8 @@ export const BeatSequence: React.FC<{ beats: Beat[]; fps: number }> = ({ beats, 
           </Sequence>
         );
       })}
+      <BrandBadges leagueBadge={leagueBadge} />
+      {musicUrl ? <MusicBed src={musicUrl} /> : null}
     </AbsoluteFill>
   );
 };
