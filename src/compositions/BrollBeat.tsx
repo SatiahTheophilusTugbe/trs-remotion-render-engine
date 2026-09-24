@@ -1,10 +1,10 @@
 import { AbsoluteFill, Audio, useCurrentFrame } from 'remotion';
-import type { Beat } from '../types/beat';
+import type { BrollBeatData } from '../types/beat';
 import { kenBurnsScale } from '../lib/kenburns';
 import { framesForBeat } from '../lib/duration';
 import { BeatBackground } from './BeatBackground';
 
-export const BrollBeat: React.FC<{ beat: Beat; fps: number }> = ({ beat, fps }) => {
+export const BrollBeat: React.FC<{ beat: BrollBeatData; fps: number }> = ({ beat, fps }) => {
   const frame = useCurrentFrame();
   const durationInFrames = framesForBeat(beat, fps);
   const scale = kenBurnsScale(frame, durationInFrames);

@@ -1,8 +1,8 @@
 import { AbsoluteFill, OffthreadVideo } from 'remotion';
-import type { Beat } from '../types/beat';
+import type { AvatarBeatData } from '../types/beat';
 import { BeatBackground } from './BeatBackground';
 
-export const AvatarBeat: React.FC<{ beat: Beat }> = ({ beat }) => {
+export const AvatarBeat: React.FC<{ beat: AvatarBeatData }> = ({ beat }) => {
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
       <BeatBackground photoUrl={beat.photo_url} objectPosition="center top" />
@@ -23,7 +23,7 @@ export const AvatarBeat: React.FC<{ beat: Beat }> = ({ beat }) => {
         }}
       >
         <OffthreadVideo
-          src={beat.clip_url!}
+          src={beat.clip_url}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       </div>
