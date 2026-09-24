@@ -9,6 +9,8 @@ import { OverlayBanner } from './OverlayBanner';
 import { BrandBadges } from './BrandBadges';
 import { MusicBed } from './MusicBed';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from './CaptionLayer';
+import { TransitionLayer } from './TransitionLayer';
+import { cutFrames } from '../lib/transitions';
 
 const renderBeat = (beat: Beat, fps: number) => {
   switch (beat.type) {
@@ -30,7 +32,8 @@ export const BeatSequence: React.FC<{
   fps: number; // read by calculateMetadata only; layout uses useVideoConfig().fps
   leagueBadge?: string | null;
   musicUrl?: string | null;
-}> = ({ beats, leagueBadge, musicUrl }) => {
+  transitions?: boolean;
+}> = ({ beats, leagueBadge, musicUrl, transitions }) => {
   const { fps } = useVideoConfig();
   const slots = layoutBeats(beats, fps);
   return (
@@ -53,6 +56,7 @@ export const BeatSequence: React.FC<{
           </Sequence>
         );
       })}
+      {transitions !== false ? <TransitionLayer cuts={cutFrames(slots)} /> : null}
       <BrandBadges leagueBadge={leagueBadge} />
       {musicUrl ? <MusicBed src={musicUrl} /> : null}
     </AbsoluteFill>
