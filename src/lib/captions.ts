@@ -1,6 +1,7 @@
 import type { WordTiming } from '../types/beat';
 
 export const WORDS_PER_PAGE = 4;
+export const CAPTION_BRIDGE_SECONDS = 0.25;
 
 export const parseWordTimings = (raw: unknown): WordTiming[] => {
   let value: unknown = raw;
@@ -30,9 +31,18 @@ export const pageWords = (words: WordTiming[], perPage = WORDS_PER_PAGE): WordTi
   return pages;
 };
 
+// Real word timings leave 23-93 ms of silence between pages. Showing a page only
+// until its last word ends makes captions blink off for 1-2 frames at every page
+// change, so a page stays visible until the next one starts when the gap is short.
+// Real pauses (>= CAPTION_BRIDGE_SECONDS) still go blank.
 export const pageAt = (pages: WordTiming[][], tSeconds: number): WordTiming[] | null => {
-  for (const page of pages) {
-    if (tSeconds >= page[0].start && tSeconds < page[page.length - 1].end) return page;
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+    const from = page[0].start;
+    const lastEnd = page[page.length - 1].end;
+    const next = pages[i + 1];
+    const to = next && next[0].start - lastEnd < CAPTION_BRIDGE_SECONDS ? next[0].start : lastEnd;
+    if (tSeconds >= from && tSeconds < to) return page;
   }
   return null;
 };

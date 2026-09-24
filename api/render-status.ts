@@ -32,7 +32,15 @@ export async function GET(request: Request): Promise<Response> {
       progress: progress.overallProgress,
       render_url: null,
       error: first
-        ? { type: first.type, is_fatal: first.isFatal, message: first.message.split('\n')[0] }
+        ? {
+            type: first.type,
+            is_fatal: first.isFatal,
+            message: first.message
+              .split('\n')[0]
+              .replace(/https?:\/\/(?:[^\s\/@]*@)?([^\s\/?#:]+)\S*/g, '<url:$1>')
+              .replace(/bot\d+:[A-Za-z0-9_-]+/g, 'bot<redacted>')
+              .slice(0, 300),
+          }
         : null,
     });
   }

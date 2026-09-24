@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { parseWordTimings, pageWords, pageAt, activeWordIndex } from './captions';
+import {
+  parseWordTimings,
+  pageWords,
+  pageAt,
+  activeWordIndex,
+  CAPTION_BRIDGE_SECONDS,
+} from './captions';
+import ballmer from '../fixtures/real-story-ballmer.json';
 import type { WordTiming } from '../types/beat';
 
 const words: WordTiming[] = [
@@ -57,9 +64,47 @@ describe('pageAt', () => {
     expect(pageAt(pages, 2.0)).toBe(pages[1]);
     expect(pageAt(pages, 2.7)).toBe(pages[2]);
   });
-  it('returns null in the gap between pages and after the last word', () => {
-    expect(pageAt(pages, 1.74)).toBeNull(); // page 0 ends 1.718, page 1 starts 1.765
+  it('bridges tiny gaps between pages and is null after the last word', () => {
+    expect(pageAt(pages, 1.74)).toBe(pages[0]); // 47 ms gap, page 1 starts 1.765
     expect(pageAt(pages, 3.0)).toBeNull();
+  });
+  it('a real pause (gap >= CAPTION_BRIDGE_SECONDS) stays blank', () => {
+    const w = (i: number, start: number, end: number): WordTiming => ({ word: `w${i}`, start, end });
+    const synthetic = [
+      w(1, 0, 0.25),
+      w(2, 0.25, 0.5),
+      w(3, 0.5, 0.75),
+      w(4, 0.75, 1.0),
+      w(5, 1.325, 1.5),
+      w(6, 1.5, 1.7),
+      w(7, 1.7, 1.9),
+      w(8, 1.9, 2.1),
+    ];
+    const p = pageWords(synthetic);
+    expect(pageAt(p, 1.1)).toBeNull();
+    expect(pageAt(p, 1.325)).toBe(p[1]);
+  });
+  it('real ElevenLabs data: no 1-2 frame caption blinks at 30 or 25 fps', () => {
+    for (const beat of ballmer as { word_timings: string }[]) {
+      const p = pageWords(parseWordTimings(beat.word_timings));
+      const first = p[0][0].start;
+      const last = p[p.length - 1][p[p.length - 1].length - 1].end;
+      for (const fps of [30, 25]) {
+        const runs: number[] = [];
+        let run = 0;
+        for (let f = Math.ceil(first * fps); f / fps <= last; f++) {
+          if (pageAt(p, f / fps) === null) run++;
+          else if (run > 0) {
+            runs.push(run);
+            run = 0;
+          }
+        }
+        if (run > 0) runs.push(run);
+        for (const r of runs) {
+          expect(r).toBeGreaterThanOrEqual(Math.floor(CAPTION_BRIDGE_SECONDS * fps));
+        }
+      }
+    }
   });
 });
 

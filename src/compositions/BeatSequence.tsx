@@ -31,12 +31,16 @@ export const BeatSequence: React.FC<{
   let frameCursor = 0;
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
-      {beats.map((beat) => {
+      {beats.map((beat, index) => {
         const durationInFrames = framesForBeat(beat, fps);
         const from = frameCursor;
         frameCursor += durationInFrames;
         return (
-          <Sequence key={beat.beat_index} from={from} durationInFrames={durationInFrames}>
+          <Sequence
+            key={`${index}-${beat.beat_index}`}
+            from={from}
+            durationInFrames={durationInFrames}
+          >
             {renderBeat(beat, fps)}
             {beat.type === 'broll' && beat.overlay_text ? <OverlayBanner text={beat.overlay_text} /> : null}
             {(() => {
