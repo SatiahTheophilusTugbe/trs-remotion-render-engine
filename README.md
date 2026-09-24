@@ -19,7 +19,9 @@ See `api/submit-render.ts` and `api/render-status.ts` for the implementation.
 ### Example: `BeatSequence` request
 
 The real composition rendered on Lambda is `BeatSequence` (`AvatarBeat` + `BrollBeat`,
-assembled dynamically from a `beats` array). Example `submit-render` request body:
+assembled dynamically from a `beats` array). Send the header
+`x-trs-render-key: <TRS_RENDER_API_KEY>` with every request, or the API returns 401.
+Example `submit-render` request body:
 
 ```json
 {
@@ -34,8 +36,13 @@ assembled dynamically from a `beats` array). Example `submit-render` request bod
 }
 ```
 
-`beats` is an array of `Beat` (see `src/types/beat.ts`) — `type: 'avatar'` beats use
-`clip_url`, `type: 'broll'` beats use `audio_url` (Ken Burns effect over `photo_url`).
+The `https://example.com/...` URLs above are placeholders. Replace `photo_url`,
+`clip_url` and `audio_url` with real, publicly reachable media URLs — otherwise the
+submit call still returns a valid `render_id`, but the render then fails on unfetchable media.
+
+`beats` is an array of `Beat` (see `src/types/beat.ts`). `photo_url` is read by both beat
+types. `clip_url` is read only by `avatar` beats (required for them); `audio_url` is read
+only by `broll` beats (optional; a Ken Burns effect runs over `photo_url`).
 `fps` must match the frame rate the composition should render at.
 
 ## Environment variables
