@@ -1,21 +1,11 @@
-import { AbsoluteFill, Img, OffthreadVideo } from 'remotion';
+import { AbsoluteFill, OffthreadVideo } from 'remotion';
 import type { Beat } from '../types/beat';
+import { BeatBackground } from './BeatBackground';
 
 export const AvatarBeat: React.FC<{ beat: Beat }> = ({ beat }) => {
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
-      <Img
-        src={beat.photo_url}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          objectPosition: 'center top',
-        }}
-      />
+      <BeatBackground photoUrl={beat.photo_url} objectPosition="center top" />
       <div
         style={{
           position: 'absolute',
