@@ -14,7 +14,7 @@ Response: `{ render_id: string, bucket_name: string }`
 **`GET /api/render-status?render_id=<id>&bucket_name=<bucket>`**
 Response: `{ status: 'rendering' | 'done' | 'failed', progress: number, render_url: string | null }`.
 When `status` is `failed`, the response also carries `error: { type, is_fatal, message } | null`
-(`message` is the first line of the underlying error only, never a stack trace).
+(`message` is the first line of the underlying error only, never a stack trace; any URL in it is reduced to `<url:host>`, so only the host is shown).
 
 `framesPerLambda` (optional, integer, minimum 5) sets how many frames each Lambda chunk
 renders: fewer, larger chunks mean fewer parallel Lambda invocations but a slower render,
@@ -79,7 +79,7 @@ the start of that beat**. Invalid or unparseable values are ignored (no captions
 
 What is rendered:
 
-- **Captions:** words are shown four at a time (a fixed pager) in bold Montserrat, white with a black stroke; the currently spoken word is highlighted lime (`#CCFF00`). Captions are drawn on both `broll` and `avatar` beats when `word_timings` is present, and disappear during gaps between word pages. On broll beats they sit near the bottom; on avatar beats they sit above the corner avatar box.
+- **Captions:** words are shown four at a time (a fixed pager) in bold Montserrat, white with a black stroke; the currently spoken word is highlighted lime (`#CCFF00`). Captions are drawn on both `broll` and `avatar` beats when `word_timings` is present, and a page stays visible through gaps shorter than 0.25 s between word pages (no blinking) but disappears during real pauses. On broll beats they sit near the bottom; on avatar beats they sit above the corner avatar box.
 - **Banner:** a `broll` beat's `overlay_text` is shown as a banner near the top (below the badge row) for the first 4 seconds of that beat only. Avatar beats do not show a banner.
 - **Badges:** a `THIRD RAIL SPORTS` badge in the top-left on every frame, plus the optional `leagueBadge` in the top-right.
 - **Music:** see `musicUrl` above.
@@ -88,7 +88,7 @@ What is rendered:
 ## Known limitations
 
 - Some real photo hosts cannot be loaded by the renderer. Verified: `cdn.nba.com` images fail on Lambda with `Error loading image with src: ...`. Re-host photos (e.g. to blob storage) before rendering.
-- A failed render's `error.message` can include the URL of the asset that failed, so do not put secrets in media URLs.
+- A failed render's `error.message` shows only the host of any URL (e.g. `<url:cdn.nba.com>`), never the full asset URL.
 - Avatar-beat caption timing comes from the ElevenLabs alignment of the script, while the audible voice is HeyGen's, so it can drift slightly; it is unverified against a real HeyGen clip.
 - The AWS Lambda concurrency limit (see below) constrains long renders.
 
