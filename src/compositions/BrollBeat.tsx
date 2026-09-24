@@ -1,11 +1,12 @@
 import { AbsoluteFill, Audio, Img, useCurrentFrame } from 'remotion';
 import type { Beat } from '../types/beat';
 import { kenBurnsScale } from '../lib/kenburns';
+import { framesForBeat } from '../lib/duration';
 import { montserratBold } from '../lib/fonts';
 
 export const BrollBeat: React.FC<{ beat: Beat; fps: number }> = ({ beat, fps }) => {
   const frame = useCurrentFrame();
-  const durationInFrames = Math.round(beat.duration_sec * fps);
+  const durationInFrames = framesForBeat(beat, fps);
   const scale = kenBurnsScale(frame, durationInFrames);
 
   return (
@@ -19,7 +20,7 @@ export const BrollBeat: React.FC<{ beat: Beat; fps: number }> = ({ beat, fps }) 
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          objectPosition: 'center',
+          objectPosition: 'center top',
           transform: `scale(${scale})`,
         }}
       />

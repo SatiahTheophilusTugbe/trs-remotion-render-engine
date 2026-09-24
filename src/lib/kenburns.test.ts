@@ -6,7 +6,7 @@ describe('kenBurnsScale', () => {
     expect(kenBurnsScale(0, 60)).toBe(1);
   });
 
-  it('reaches the end scale exactly at the last frame', () => {
+  it('reaches the end scale when frame equals durationInFrames', () => {
     expect(kenBurnsScale(60, 60)).toBeCloseTo(1.08);
   });
 

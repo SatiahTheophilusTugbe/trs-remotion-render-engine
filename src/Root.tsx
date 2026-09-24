@@ -2,6 +2,7 @@ import { Composition } from 'remotion';
 import { BeatSequence } from './compositions/BeatSequence';
 import type { Beat } from './types/beat';
 import { framesForBeats } from './lib/duration';
+import { compositionMetadata } from './lib/metadata';
 
 const FPS = 30;
 
@@ -48,9 +49,7 @@ export const RemotionRoot: React.FC = () => {
       height={1920}
       durationInFrames={framesForBeats(defaultBeats, FPS)}
       defaultProps={{ beats: defaultBeats, fps: FPS }}
-      calculateMetadata={({ props }) => ({
-        durationInFrames: framesForBeats(props.beats, props.fps),
-      })}
+      calculateMetadata={({ props }) => compositionMetadata(props.beats, props.fps)}
     />
   );
 };
