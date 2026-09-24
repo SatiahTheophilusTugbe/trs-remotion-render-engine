@@ -50,6 +50,19 @@ submit call still returns a valid `render_id`, but the render then fails on unfe
 `beats` is an array of `Beat` (see `src/types/beat.ts`). `photo_url` is read by both beat
 types. `clip_url` is read only by `avatar` beats (required for them); `audio_url` is read
 only by `broll` beats (optional; a Ken Burns effect runs over `photo_url`).
+
+**Null tolerance.** Real pipeline data contains nulls, and these are tolerated (no crash):
+
+- `overlay_text` null/empty: no banner.
+- `audio_url` null: no narration audio (only b-roll beats read it).
+- `photo_url` null, empty or missing: a dark (`#0a0a0a`) background with a faint centered `TRS` watermark.
+- `word_timings` null or invalid: no captions on that beat, never an error.
+- `clip_url` on b-roll beats: ignored.
+
+These DO fail the render: an `avatar` beat without a `clip_url` (it is required for avatar
+beats; input validation is planned for the n8n integration), and any image, audio or video
+URL that cannot be fetched.
+
 `fps` is honored: the composition's timeline length is derived from the beats' `duration_sec`
 at the requested `fps` (default 30).
 
@@ -70,7 +83,14 @@ What is rendered:
 - **Banner:** a `broll` beat's `overlay_text` is shown as a banner near the top (below the badge row) for the first 4 seconds of that beat only. Avatar beats do not show a banner.
 - **Badges:** a `THIRD RAIL SPORTS` badge in the top-left on every frame, plus the optional `leagueBadge` in the top-right.
 - **Music:** see `musicUrl` above.
-- `photo_url` may be `null`; backgrounds tolerate a missing photo.
+- A null, empty or missing `photo_url` renders the dark `#0a0a0a` background with a faint centered `TRS` watermark (see Null tolerance above).
+
+## Known limitations
+
+- Some real photo hosts cannot be loaded by the renderer. Verified: `cdn.nba.com` images fail on Lambda with `Error loading image with src: ...`. Re-host photos (e.g. to blob storage) before rendering.
+- A failed render's `error.message` can include the URL of the asset that failed, so do not put secrets in media URLs.
+- Avatar-beat caption timing comes from the ElevenLabs alignment of the script, while the audible voice is HeyGen's, so it can drift slightly; it is unverified against a real HeyGen clip.
+- The AWS Lambda concurrency limit (see below) constrains long renders.
 
 ## Lambda concurrency
 
