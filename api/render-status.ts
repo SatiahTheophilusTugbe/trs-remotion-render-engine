@@ -26,12 +26,20 @@ export async function GET(request: Request): Promise<Response> {
   });
 
   if (progress.fatalErrorEncountered) {
-    return Response.json({ status: 'failed', progress: progress.overallProgress, render_url: null });
+    const first = progress.errors[0];
+    return Response.json({
+      status: 'failed',
+      progress: progress.overallProgress,
+      render_url: null,
+      error: first
+        ? { type: first.type, is_fatal: first.isFatal, message: first.message.split('\n')[0] }
+        : null,
+    });
   }
 
   return Response.json({
     status: progress.done ? 'done' : 'rendering',
     progress: progress.overallProgress,
-    render_url: progress.outputFile,
+    render_url: progress.outputFile ?? null,
   });
 }

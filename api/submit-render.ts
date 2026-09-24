@@ -8,7 +8,15 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { compositionId, inputProps } = await request.json();
+  const { compositionId, inputProps, framesPerLambda } = await request.json();
+
+  // Remotion's MINIMUM_FRAMES_PER_FUNCTION is 5 (@remotion/serverless-client validate-frames-per-function).
+  if (framesPerLambda !== undefined && (!Number.isInteger(framesPerLambda) || framesPerLambda < 5)) {
+    return Response.json(
+      { error: 'framesPerLambda must be an integer of at least 5 when provided' },
+      { status: 400 },
+    );
+  }
 
   const { renderId, bucketName } = await renderMediaOnLambda({
     region: process.env.REMOTION_REGION! as AwsRegion,
@@ -17,6 +25,7 @@ export async function POST(request: Request): Promise<Response> {
     composition: compositionId,
     codec: 'h264',
     inputProps,
+    ...(framesPerLambda !== undefined ? { framesPerLambda } : {}),
   });
 
   return Response.json({ render_id: renderId, bucket_name: bucketName });
