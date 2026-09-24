@@ -103,13 +103,37 @@ with an error message starting `AWS Concurrency limit reached`.
 ## Testing a render directly on Lambda
 
 ```
-node --env-file=.env scripts/test-render.mjs [short|full]
+node --env-file=.env scripts/test-render.mjs [short|full|g4]
 ```
 
 Renders the real `BeatSequence` composition straight on Lambda, bypassing the Vercel API.
 `short` (default) is a 2s avatar + 2s broll beat with default chunking; `full` is a 5s +
 4s (270 frame) render using `framesPerLambda: 45` to stay under the concurrency limit.
-Prints the final output URL on success or `progress.errors` on failure.
+`g4` is avatar 4s + stat 3s + broll 4s (330 frames, `framesPerLambda: 60`, 7 invocations) and
+exercises the stat beat and both wipe transitions. Prints the final output URL on success or `progress.errors` on failure.
+
+## Stat beat and transitions (G4)
+
+**`stat` beat** (additive; `avatar`/`broll` beats are unchanged). Fields:
+`{ type: 'stat', photo_url, audio_url?, overlay_text?, narration_line, duration_sec, beat_index, stat: { value: number, label: string, prefix?: string, suffix?: string, decimals?: number } }`.
+It renders a count-up stat card (lime `#CCFF00` value, white label) over the photo. Keep
+the rendered `value` (including prefix/suffix and separators) to about 7 characters or
+fewer so it fits the card. The upstream pipeline does not emit `stat` beats yet.
+
+**`transitions` prop** on `BeatSequence` (boolean, default `true`): a lime wipe panel
+sweeps across at every beat cut. It is non-overlapping: the cut frame is fully lime, so
+the wipe never changes total duration and never shifts any beat or audio. Pass
+`transitions: false` to disable it.
+
+**Current site:** `trs-remotion-g4-8df37ac` (see `deploy-manifest.json`). The live API keeps
+rendering the previous site (`trs-remotion-g3-bbfa0ca`) until the human updates
+`REMOTION_SERVE_URL`:
+
+```
+npx vercel env rm REMOTION_SERVE_URL production
+npx vercel env add REMOTION_SERVE_URL production
+npx vercel --prod
+```
 
 ## Environment variables
 
