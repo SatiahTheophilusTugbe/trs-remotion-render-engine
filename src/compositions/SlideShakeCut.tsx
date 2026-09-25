@@ -5,7 +5,7 @@
 // pseudo-random shake vector x decay curve, plus an impact flash). MIT, Trimora Inc.
 // Wraps one beat's content inside its <Sequence>. NON-OVERLAPPING: beat lengths are untouched.
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
-import { slideShakeState } from '../lib/slideShake';
+import { slideShakeState, STRIP_COLOR } from '../lib/slideShake';
 
 export const SlideShakeCut: React.FC<{
   slideOut: boolean;
@@ -16,7 +16,7 @@ export const SlideShakeCut: React.FC<{
   const { durationInFrames } = useVideoConfig();
   const s = slideShakeState(frame, durationInFrames, { slideOut, slideIn });
   return (
-    <AbsoluteFill style={{ backgroundColor: '#0a0a0a', overflow: 'hidden' }}>
+    <AbsoluteFill style={{ backgroundColor: STRIP_COLOR, overflow: 'hidden' }}>
       <AbsoluteFill
         style={{
           transform: `translate(${s.x.toFixed(2)}px, ${s.y.toFixed(2)}px) rotate(${s.rot.toFixed(3)}deg) scale(${s.scale.toFixed(4)})`,
