@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@remotion/lambda/client', () => ({ renderMediaOnLambda: vi.fn() }));
 
+vi.mock('node:dns/promises', () => ({ lookup: vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]) }));
 vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: vi.fn(function () { return { send: (cmd: unknown) => mockS3Send(cmd) }; }),
   PutObjectCommand: vi.fn(function (input: unknown) { return { input }; }),
@@ -28,6 +29,9 @@ const req = (body: unknown, key: string | null = KEY, raw = false) =>
 
 beforeEach(() => {
   process.env.TRS_RENDER_API_KEY = KEY;
+  process.env.REMOTION_REGION = 'us-east-1';
+  process.env.REMOTION_FUNCTION_NAME = 'fn';
+  process.env.REMOTION_SERVE_URL = 'https://serve.example.invalid';
   process.env.REMOTION_AWS_ACCESS_KEY_ID = 'AKIAEXAMPLE';
   process.env.REMOTION_AWS_SECRET_ACCESS_KEY = 'secret';
   mockS3Send.mockReset();
@@ -139,5 +143,23 @@ describe('POST /api/submit-render', () => {
     expect(res.status).toBe(422);
     expect((await res.json()).details[0]).toContain('status=upload_failed');
     expect(mockRender).not.toHaveBeenCalled();
+  });
+
+  it('500 server misconfigured (no values) when AWS/Remotion env is missing; nothing fetched', async () => {
+    for (const name of ['REMOTION_AWS_ACCESS_KEY_ID', 'REMOTION_AWS_SECRET_ACCESS_KEY', 'REMOTION_REGION', 'REMOTION_FUNCTION_NAME', 'REMOTION_SERVE_URL']) {
+      const saved = process.env[name];
+      delete process.env[name];
+      const res = await POST(req({ compositionId: 'C', inputProps: { beats: [beat()] } }));
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: 'server misconfigured' });
+      process.env[name] = saved;
+    }
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockRender).not.toHaveBeenCalled();
+  });
+
+  it('401 still wins over misconfiguration', async () => {
+    delete process.env.REMOTION_AWS_ACCESS_KEY_ID;
+    expect((await POST(req({}, 'nope'))).status).toBe(401);
   });
 });

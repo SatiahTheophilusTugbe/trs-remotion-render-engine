@@ -28,6 +28,17 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const required = [
+    'REMOTION_AWS_ACCESS_KEY_ID',
+    'REMOTION_AWS_SECRET_ACCESS_KEY',
+    'REMOTION_REGION',
+    'REMOTION_FUNCTION_NAME',
+    'REMOTION_SERVE_URL',
+  ];
+  if (required.some((name) => !process.env[name])) {
+    return Response.json({ error: 'server misconfigured' }, { status: 500 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();

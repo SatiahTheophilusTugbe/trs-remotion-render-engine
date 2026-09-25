@@ -1,3 +1,8 @@
 {
-  "buildCommand": null
+  "buildCommand": null,
+  "functions": {
+    "api/submit-render.ts": {
+      "maxDuration": 60
+    }
+  }
 }

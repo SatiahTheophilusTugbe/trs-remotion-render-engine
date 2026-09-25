@@ -4,6 +4,7 @@ import {
   formatPhotoError, rehostPhotos, MAX_PHOTO_BYTES, BROWSER_USER_AGENT, REHOST_BUCKET,
 } from './rehost';
 
+const pub = async () => ['93.184.216.34'];
 const img = (type = 'image/jpeg', size = 10, extra: Record<string, string> = {}) =>
   new Response(new Uint8Array(size), { status: 200, headers: { 'content-type': type, ...extra } });
 
@@ -52,7 +53,7 @@ describe('rehostPhotos', () => {
   it('replaces photo_url with S3 URLs, sends UA, uploads with content type', async () => {
     const put = vi.fn().mockResolvedValue(undefined);
     const fetchFn = vi.fn(async () => img('image/png')) as unknown as typeof fetch;
-    const r = await rehostPhotos(beats, 'rid', { fetchFn, put });
+    const r = await rehostPhotos(beats, 'rid', { fetchFn, put, resolve: pub });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.beats.map((b) => b.photo_url)).toEqual([0, 1, 2].map((i) => publicUrl(`assets/rid/${i}.png`)));
@@ -75,7 +76,7 @@ describe('rehostPhotos', () => {
       return img();
     }) as unknown as typeof fetch;
     const many = Array.from({ length: 12 }, (_, i) => ({ beat_index: i, photo_url: 'https://h.example.invalid/x.jpg' }));
-    const r = await rehostPhotos(many, 'rid', { fetchFn, put: async () => {} });
+    const r = await rehostPhotos(many, 'rid', { fetchFn, put: async () => {}, resolve: pub });
     expect(r.ok).toBe(true);
     expect(peak).toBe(4);
   });
@@ -108,7 +109,7 @@ describe('rehostPhotos', () => {
     let call = 0;
     const fetchFn = (async () => (call++ === 1 ? make() : img())) as unknown as typeof fetch;
     const put = vi.fn().mockResolvedValue(undefined);
-    const r = await rehostPhotos(beats, 'rid', { fetchFn, put, concurrency: 1 });
+    const r = await rehostPhotos(beats, 'rid', { fetchFn, put, concurrency: 1, resolve: pub });
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.errors).toHaveLength(1);
@@ -120,7 +121,7 @@ describe('rehostPhotos', () => {
 
   it('upload failure fails the batch', async () => {
     const put = vi.fn().mockRejectedValue(new Error('AccessDenied https://s3/x?sig=SECRET'));
-    const r = await rehostPhotos(beats, 'rid', { fetchFn: (async () => img()) as unknown as typeof fetch, put });
+    const r = await rehostPhotos(beats, 'rid', { fetchFn: (async () => img()) as unknown as typeof fetch, put, resolve: pub });
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.errors).toHaveLength(3);
