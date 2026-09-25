@@ -10,7 +10,8 @@ import { BrandBadges } from './BrandBadges';
 import { MusicBed } from './MusicBed';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from './CaptionLayer';
 import { TransitionLayer } from './TransitionLayer';
-import { cutFrames } from '../lib/transitions';
+import { cutStyleFor, wipeCutFrames } from '../lib/cuts';
+import { SlideShakeCut } from './SlideShakeCut';
 
 const renderBeat = (beat: Beat, fps: number) => {
   switch (beat.type) {
@@ -46,17 +47,32 @@ export const BeatSequence: React.FC<{
             from={from}
             durationInFrames={durationInFrames}
           >
-            {renderBeat(beat, fps)}
-            {beat.type === 'broll' && beat.overlay_text ? <OverlayBanner text={beat.overlay_text} /> : null}
             {(() => {
-              const words = parseWordTimings(beat.word_timings);
-              const show = words.length > 0 && (beat.type !== 'avatar' || CAPTIONS_ON_AVATAR);
-              return show ? <CaptionLayer words={words} variant={beat.type === 'avatar' ? 'avatar' : 'broll'} /> : null;
+              const content = (
+                <>
+                  {renderBeat(beat, fps)}
+                  {beat.type === 'broll' && beat.overlay_text ? <OverlayBanner text={beat.overlay_text} /> : null}
+                  {(() => {
+                    const words = parseWordTimings(beat.word_timings);
+                    const show = words.length > 0 && (beat.type !== 'avatar' || CAPTIONS_ON_AVATAR);
+                    return show ? <CaptionLayer words={words} variant={beat.type === 'avatar' ? 'avatar' : 'broll'} /> : null;
+                  })()}
+                </>
+              );
+              const slideIn = transitions !== false && cutStyleFor(beats, index) === 'slideShake';
+              const slideOut = transitions !== false && cutStyleFor(beats, index + 1) === 'slideShake';
+              return slideIn || slideOut ? (
+                <SlideShakeCut slideIn={slideIn} slideOut={slideOut}>
+                  {content}
+                </SlideShakeCut>
+              ) : (
+                content
+              );
             })()}
           </Sequence>
         );
       })}
-      {transitions !== false ? <TransitionLayer cuts={cutFrames(slots)} /> : null}
+      {transitions !== false ? <TransitionLayer cuts={wipeCutFrames(beats, slots)} /> : null}
       <BrandBadges leagueBadge={leagueBadge} />
       {musicUrl ? <MusicBed src={musicUrl} /> : null}
     </AbsoluteFill>

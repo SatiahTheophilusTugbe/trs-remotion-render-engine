@@ -151,10 +151,12 @@ It renders a count-up stat card (lime `#CCFF00` value, white label) over the pho
 the rendered `value` (including prefix/suffix and separators) to about 7 characters or
 fewer so it fits the card. The upstream pipeline does not emit `stat` beats yet.
 
-**`transitions` prop** on `BeatSequence` (boolean, default `true`): a lime wipe panel
-sweeps across at every beat cut. It is non-overlapping: the cut frame is fully lime, so
-the wipe never changes total duration and never shifts any beat or audio. Pass
-`transitions: false` to disable it.
+**`transitions` prop** on `BeatSequence` (boolean, default `true`). Cuts are non-overlapping:
+they never change total duration and never shift any beat or audio. The style of the cut
+into beat `i` is chosen by `cutStyleFor` (`src/lib/cuts.ts`): no cut into the first beat;
+an **impact cut** (slide-push + landing shake + brief white flash, `SlideShakeCut`) when the
+incoming beat is a `stat` beat or the last beat; otherwise the default **lime wipe** (the
+cut frame is fully lime). Pass `transitions: false` to disable both styles.
 
 **Current site:** `trs-remotion-g4-8df37ac` (see `deploy-manifest.json`). The live API keeps
 rendering the previous site (`trs-remotion-g3-bbfa0ca`) until the human updates
