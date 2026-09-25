@@ -41,7 +41,8 @@ const beats = [
   statBeat(3, 3, { value: 1250, label: 'Career points', prefix: '', suffix: '', decimals: 0 }, media.avatarPhoto),
   // photo on a host that fails on Lambda directly: proves server-side re-hosting
   { ...broll, beat_index: 4, photo_url: media.avatarPhotoCdnNba, audio_url: media.brollAudio, clip_url: '' },
-  statBeat(5, 2, { value: 1250, label: 'Career points', prefix: '', suffix: '', decimals: 0 }, media.avatarPhotoCdnNba),
+  statBeat(5, 3, { value: 1250, label: 'Career points', prefix: '', suffix: '', decimals: 0 }, media.avatarPhotoCdnNba),
+  { ...avatar, beat_index: 6, photo_url: media.avatarPhoto, clip_url: media.avatarClipStandin },
 ];
 
 const totalSec = beats.reduce((s, b) => s + b.duration_sec, 0);
@@ -49,6 +50,11 @@ const totalFrames = beats.reduce((s, b) => s + Math.round(b.duration_sec * FPS),
 const framesPerLambda = Math.max(20, Math.ceil(totalFrames / 8));
 const invocations = Math.ceil(totalFrames / framesPerLambda) + 1;
 console.log(`beats=${beats.length} totalSec=${totalSec.toFixed(1)} totalFrames=${totalFrames} framesPerLambda=${framesPerLambda} expectedInvocations=${invocations}`);
+// Production target (user, 2026-09-25): videos anchor around 50+ seconds with at least 7 beats.
+if (beats.length < 7 || totalSec < 50) {
+  console.error(`Abort: proof payload must have >= 7 beats and >= 50s (got ${beats.length} beats, ${totalSec.toFixed(1)}s).`);
+  process.exit(1);
+}
 if (invocations > MAX_INVOCATIONS) {
   console.error(`Abort: ${invocations} invocations exceeds the ${MAX_INVOCATIONS} limit (concurrency cap 10).`);
   process.exit(1);
