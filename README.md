@@ -185,3 +185,12 @@ Rules:
 - `word_timings` passes through untouched.
 
 `warnings` is an array of non-fatal notices (clamped text); callers should log them. A non-JSON or non-object request body returns 400 `request body must be a JSON object`; a Lambda submit failure returns 502 `{ error: 'render submit failed', details: [<redacted first line>] }`. Beat error labels include the array position, e.g. `beat 1 (position 0)`.
+
+## Photo re-hosting (`/api/submit-render`)
+
+Some photo CDNs (e.g. `cdn.nba.com`) refuse the fetch from Lambda/headless Chromium, so after validation and BEFORE calling Lambda the API re-hosts every beat's photo (`src/lib/rehost.ts`):
+
+- Each `photo_url` is fetched server-side (browser `User-Agent`, 10 s timeout, max 4 concurrent), must return an `image/jpeg|png|webp|gif` content type and be at most 15 MB.
+- It is uploaded to the Remotion bucket `remotionlambda-useast1-riu6td7irs` at `assets/<render-uuid>/<position>.<ext>` (same AWS identity as the Lambda client, `REMOTION_AWS_*`; no extra env vars) and `photo_url` is replaced with the public `https://s3.us-east-1.amazonaws.com/<bucket>/<key>` URL in the props sent to Lambda. The bucket serves `assets/` publicly (verified by spike; no ACL is set).
+- NO fallback: if any photo cannot be fetched or uploaded, nothing is rendered and the API returns HTTP 422 `{ "error": "photo_unreachable", "details": [ "beat 3 (position 2): photo could not be fetched (host=cdn.example.com, status=403)" ] }`. `status` is the HTTP code or a reason (`timeout`, `network_error`, `unsupported_content_type`, `too_large`, `empty_body`, `upload_failed`). Only the hostname is reported, never the URL, query or token. A human should re-upload the photo.
+- Re-hosted objects are not deleted automatically (consider an S3 lifecycle rule on `assets/`).

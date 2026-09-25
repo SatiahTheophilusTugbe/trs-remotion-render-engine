@@ -2,14 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@remotion/lambda/client', () => ({ renderMediaOnLambda: vi.fn() }));
 
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: vi.fn(function () { return { send: (cmd: unknown) => mockS3Send(cmd) }; }),
+  PutObjectCommand: vi.fn(function (input: unknown) { return { input }; }),
+}));
+
 import { renderMediaOnLambda } from '@remotion/lambda/client';
 import { POST } from '../../api/submit-render';
 
 const mockRender = vi.mocked(renderMediaOnLambda);
+const mockS3Send = vi.fn();
+const mockFetch = vi.fn();
 const KEY = 'test-key';
 
 const beat = (o: object = {}) => ({
-  type: 'broll', photo_url: 'https://example.com/p.jpg', narration_line: 'hi',
+  type: 'broll', photo_url: 'https://cdn.example.invalid/p.jpg?tok=SECRET', narration_line: 'hi',
   duration_sec: 5, beat_index: 0, ...o,
 });
 const req = (body: unknown, key: string | null = KEY, raw = false) =>
@@ -21,6 +28,13 @@ const req = (body: unknown, key: string | null = KEY, raw = false) =>
 
 beforeEach(() => {
   process.env.TRS_RENDER_API_KEY = KEY;
+  process.env.REMOTION_AWS_ACCESS_KEY_ID = 'AKIAEXAMPLE';
+  process.env.REMOTION_AWS_SECRET_ACCESS_KEY = 'secret';
+  mockS3Send.mockReset();
+  mockS3Send.mockResolvedValue({});
+  mockFetch.mockReset();
+  mockFetch.mockImplementation(async () => new Response(new Uint8Array(8), { headers: { 'content-type': 'image/jpeg' } }));
+  vi.stubGlobal('fetch', mockFetch);
   mockRender.mockReset();
   mockRender.mockResolvedValue({ renderId: 'r1', bucketName: 'b1' } as never);
 });
@@ -85,5 +99,45 @@ describe('POST /api/submit-render', () => {
     expect(json.details).toHaveLength(1);
     expect(json.details[0]).toContain('<url:api.telegram.org>');
     expect(json.details[0]).not.toMatch(/SECRET|second line/);
+  });
+
+  it('re-hosts photos: S3 URL replaces photo_url in props sent to Lambda', async () => {
+    const res = await POST(
+      req({ compositionId: 'C', inputProps: { beats: [beat(), beat({ beat_index: 1 })] } }),
+    );
+    expect(res.status).toBe(200);
+    expect(mockS3Send).toHaveBeenCalledTimes(2);
+    const put = (mockS3Send.mock.calls[0][0] as { input: { Bucket: string; Key: string; ContentType: string } }).input;
+    expect(put.Bucket).toBe('remotionlambda-useast1-riu6td7irs');
+    expect(put.Key).toMatch(/^assets\/[0-9a-f-]{36}\/0\.jpg$/);
+    expect(put.ContentType).toBe('image/jpeg');
+    const sent = mockRender.mock.calls[0][0].inputProps as { beats: { photo_url: string }[] };
+    expect(sent.beats[0].photo_url).toBe(
+      `https://s3.us-east-1.amazonaws.com/remotionlambda-useast1-riu6td7irs/${put.Key}`,
+    );
+    expect(sent.beats[1].photo_url).toMatch(/\/1\.jpg$/);
+    expect(JSON.stringify(sent)).not.toMatch(/example\.invalid/);
+  });
+
+  it('422 photo_unreachable when a photo cannot be fetched; Lambda NOT called; no URL leak', async () => {
+    mockFetch.mockImplementation(async () => new Response('denied', { status: 403 }));
+    const res = await POST(req({ compositionId: 'C', inputProps: { beats: [beat()] } }));
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error).toBe('photo_unreachable');
+    expect(json.details).toEqual([
+      'beat 0 (position 0): photo could not be fetched (host=cdn.example.invalid, status=403)',
+    ]);
+    expect(JSON.stringify(json)).not.toMatch(/SECRET|tok=|https?:/);
+    expect(mockRender).not.toHaveBeenCalled();
+    expect(mockS3Send).not.toHaveBeenCalled();
+  });
+
+  it('422 when the S3 upload fails; Lambda NOT called', async () => {
+    mockS3Send.mockRejectedValue(new Error('AccessDenied'));
+    const res = await POST(req({ compositionId: 'C', inputProps: { beats: [beat()] } }));
+    expect(res.status).toBe(422);
+    expect((await res.json()).details[0]).toContain('status=upload_failed');
+    expect(mockRender).not.toHaveBeenCalled();
   });
 });
