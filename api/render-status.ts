@@ -1,6 +1,7 @@
 // api/render-status.ts
 import { getRenderProgress } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
+import { redactMessage } from '../src/lib/redact.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -35,11 +36,7 @@ export async function GET(request: Request): Promise<Response> {
         ? {
             type: first.type,
             is_fatal: first.isFatal,
-            message: first.message
-              .split('\n')[0]
-              .replace(/https?:\/\/(?:[^\s\/@]*@)?([^\s\/?#:]+)\S*/g, '<url:$1>')
-              .replace(/bot\d+:[A-Za-z0-9_-]+/g, 'bot<redacted>')
-              .slice(0, 300),
+            message: redactMessage(first.message),
           }
         : null,
     });

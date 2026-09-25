@@ -58,7 +58,7 @@ describe('validateRenderInput', () => {
   });
 
   it('duration_sec must be finite within 0.5..60 (sweep)', () => {
-    for (const d of [0, 0.49, 60.01, NaN, Infinity, '5', null, undefined]) {
+    for (const d of [0, 0.49, 60.01, NaN, Infinity, 'x', null, undefined]) {
       expect(errs(props([broll({ duration_sec: d })])).join()).toMatch(/duration_sec/);
     }
     for (const d of [0.5, 1, 30, 60]) okRes(props([broll({ duration_sec: d })]));
@@ -72,7 +72,6 @@ describe('validateRenderInput', () => {
   });
 
   it('beat_index must be a number', () => {
-    expect(errs(props([broll({ beat_index: '1' })])).join()).toMatch(/beat_index/);
     expect(errs(props([broll({ beat_index: undefined })])).join()).toMatch(/beat_index/);
   });
 
@@ -85,12 +84,37 @@ describe('validateRenderInput', () => {
     okRes(props([broll({ clip_url: 'https://x.com/b.mp4' })]));
   });
 
-  it('empty/null/undefined photo -> null + warning; still ok', () => {
+  it('missing/null/empty photo_url is an ERROR on every beat type (no fallback)', () => {
     for (const p of ['', null, undefined]) {
-      const r = okRes(props([broll({ photo_url: p, beat_index: 3 })]));
-      expect(r.inputProps.beats[0].photo_url).toBeNull();
-      expect(r.warnings).toContain('beat 3: no photo (TRS fallback background will render)');
+      for (const mk of [avatar, broll, (o: object) => stat({}, o)]) {
+        const e = errs(props([mk({ photo_url: p, beat_index: 3 })]));
+        expect(e.join()).toMatch(/photo_url missing/);
+      }
     }
+  });
+
+  it('photo_url errors never echo the URL', () => {
+    const secret = 'http://api.telegram.org/file/bot123456:SECRETTOKEN/x.jpg';
+    const e = errs(props([broll({ photo_url: secret })])).join();
+    expect(e).toMatch(/photo_url invalid/);
+    expect(e).not.toMatch(/SECRETTOKEN|telegram/);
+  });
+
+  it('numeric strings for duration_sec and beat_index are coerced', () => {
+    const r = okRes(props([broll({ duration_sec: '5.5', beat_index: '7' })]));
+    const b = r.inputProps.beats[0];
+    expect(b.duration_sec).toBe(5.5);
+    expect(b.beat_index).toBe(7);
+    expect(errs(props([broll({ duration_sec: 'abc' })])).join()).toMatch(/duration_sec/);
+    expect(errs(props([broll({ duration_sec: '' })])).join()).toMatch(/duration_sec/);
+    expect(errs(props([broll({ duration_sec: '100' })])).join()).toMatch(/duration_sec/);
+    expect(errs(props([broll({ beat_index: 'x' })])).join()).toMatch(/beat_index/);
+  });
+
+  it('error labels include array position so duplicate beat_index stays unambiguous', () => {
+    const e = errs(props([broll({ beat_index: 1 }), broll({ beat_index: 1, photo_url: null })]));
+    expect(e.join()).toMatch(/position 1/);
+    expect(e.join()).not.toMatch(/position 0/);
   });
 
   it('non-empty invalid photo_url is an ERROR (never dropped)', () => {

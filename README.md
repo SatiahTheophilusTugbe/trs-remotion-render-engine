@@ -177,10 +177,11 @@ Rules:
 
 - `inputProps` is an object; `beats` is a non-empty array of at most 40; `fps`, if present, must be 30 (absent defaults to 30); `musicUrl`, if present, must be `https://`.
 - Every beat: `type` is `avatar|broll|stat`; `beat_index` is a number; `duration_sec` is finite, 0.5..60; all beats total at most 180s.
+- `duration_sec` and `beat_index` may be numeric strings (n8n often stringifies numbers); they are coerced to numbers in the submitted props. Non-numeric strings are errors.
 - `avatar` beats need a non-empty `https://` `clip_url`. `broll` `clip_url` stays optional.
-- `photo_url`: empty/null/missing becomes `null` with a warning (`beat N: no photo (TRS fallback background will render)`). A non-empty value must be an `https://` string of at most 2000 chars, otherwise it is an ERROR (photos are human-approved upstream, so they are never silently dropped or swapped).
+- `photo_url`: EVERY beat (avatar, broll, stat) needs a non-empty `https://` string of at most 2000 chars. Missing, null, empty, non-https or too long is an ERROR (HTTP 400, e.g. `beat 2 (position 1): photo_url missing`); there is no fallback background and the message never echoes the URL. Photos are human-approved upstream, so a beat without one is a hard stop.
 - `overlay_text` is trimmed and clamped to 80 chars (ends with `…`, adds a warning).
 - `stat` beats need a `stat` object: finite `value`; non-empty `label` (clamped to 40 chars with a warning); `prefix`/`suffix` at most 3 chars; `decimals` an integer 0..2; the formatted value (e.g. `$1,234%`) must be at most 7 characters.
 - `word_timings` passes through untouched.
 
-`warnings` is an array of non-fatal notices (missing photo, clamped text); callers should log them.
+`warnings` is an array of non-fatal notices (clamped text); callers should log them. A non-JSON or non-object request body returns 400 `request body must be a JSON object`; a Lambda submit failure returns 502 `{ error: 'render submit failed', details: [<redacted first line>] }`. Beat error labels include the array position, e.g. `beat 1 (position 0)`.

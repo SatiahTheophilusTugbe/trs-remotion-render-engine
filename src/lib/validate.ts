@@ -28,6 +28,12 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 const isHttps = (v: unknown): v is string =>
   typeof v === 'string' && v.startsWith('https://') && v.length > 'https://'.length;
+// n8n often stringifies numbers: accept numeric strings, return NaN for anything else.
+const toNum = (v: unknown): number => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '') return Number(v);
+  return NaN;
+};
 const clamp = (s: string, max: number): string => (s.length > max ? s.slice(0, max - 1) + '…' : s);
 
 export function validateRenderInput(inputProps: unknown): ValidationResult {
@@ -60,20 +66,23 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
       errors.push(`beat ${i}: must be an object`);
       return;
     }
-    const n = typeof raw.beat_index === 'number' && Number.isFinite(raw.beat_index) ? raw.beat_index : i;
-    const p = `beat ${n}`;
+    const bi = toNum(raw.beat_index);
+    const p = Number.isFinite(bi) ? `beat ${bi} (position ${i})` : `beat position ${i}`;
     const beat: Record<string, unknown> = { ...raw };
 
-    if (typeof raw.beat_index !== 'number' || !Number.isFinite(raw.beat_index)) {
-      errors.push(`beat ${i}: beat_index must be a number`);
+    if (Number.isFinite(bi)) {
+      beat.beat_index = bi;
+    } else {
+      errors.push(`${p}: beat_index must be a number`);
     }
     if (raw.type !== 'avatar' && raw.type !== 'broll' && raw.type !== 'stat') {
       errors.push(`${p}: type must be one of avatar|broll|stat`);
     }
-    const d = raw.duration_sec;
-    if (typeof d !== 'number' || !Number.isFinite(d) || d < MIN_BEAT_SEC || d > MAX_BEAT_SEC) {
+    const d = toNum(raw.duration_sec);
+    if (!Number.isFinite(d) || d < MIN_BEAT_SEC || d > MAX_BEAT_SEC) {
       errors.push(`${p}: duration_sec must be a finite number between ${MIN_BEAT_SEC} and ${MAX_BEAT_SEC}`);
     } else {
+      beat.duration_sec = d;
       total += d;
     }
 
@@ -81,12 +90,12 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
       errors.push(`${p}: avatar beats require an https:// clip_url`);
     }
 
-    // Photo policy: photos are human-approved upstream, so a bad non-empty URL is an error, never swapped.
+    // Photo policy: every beat needs a human-approved https photo. No fallback, ever: a missing or bad
+    // photo is a hard stop. Error text never echoes the URL (it can embed secrets).
     if (raw.photo_url === undefined || raw.photo_url === null || raw.photo_url === '') {
-      beat.photo_url = null;
-      warnings.push(`${p}: no photo (TRS fallback background will render)`);
+      errors.push(`${p}: photo_url missing`);
     } else if (!isHttps(raw.photo_url) || raw.photo_url.length > MAX_URL_LEN) {
-      errors.push(`${p}: photo_url must be an https:// string of at most ${MAX_URL_LEN} chars`);
+      errors.push(`${p}: photo_url invalid (must be https:// and at most ${MAX_URL_LEN} chars)`);
     }
 
     if (raw.overlay_text !== undefined && raw.overlay_text !== null) {
