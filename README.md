@@ -168,3 +168,19 @@ npx vercel --prod
 
 Run `vercel env add <NAME>` first for any env var that changed, then redeploy so the
 new values take effect.
+
+## Input validation (`/api/submit-render`)
+
+After the auth check, `inputProps` is validated and normalised by `validateRenderInput` (`src/lib/validate.ts`) before anything is sent to Lambda. Invalid input returns HTTP 400 `{ "error": "invalid input", "details": [ ...messages ] }`; the NORMALISED props are what get rendered. Success returns `{ render_id, bucket_name, warnings }`.
+
+Rules:
+
+- `inputProps` is an object; `beats` is a non-empty array of at most 40; `fps`, if present, must be 30 (absent defaults to 30); `musicUrl`, if present, must be `https://`.
+- Every beat: `type` is `avatar|broll|stat`; `beat_index` is a number; `duration_sec` is finite, 0.5..60; all beats total at most 180s.
+- `avatar` beats need a non-empty `https://` `clip_url`. `broll` `clip_url` stays optional.
+- `photo_url`: empty/null/missing becomes `null` with a warning (`beat N: no photo (TRS fallback background will render)`). A non-empty value must be an `https://` string of at most 2000 chars, otherwise it is an ERROR (photos are human-approved upstream, so they are never silently dropped or swapped).
+- `overlay_text` is trimmed and clamped to 80 chars (ends with `…`, adds a warning).
+- `stat` beats need a `stat` object: finite `value`; non-empty `label` (clamped to 40 chars with a warning); `prefix`/`suffix` at most 3 chars; `decimals` an integer 0..2; the formatted value (e.g. `$1,234%`) must be at most 7 characters.
+- `word_timings` passes through untouched.
+
+`warnings` is an array of non-fatal notices (missing photo, clamped text); callers should log them.

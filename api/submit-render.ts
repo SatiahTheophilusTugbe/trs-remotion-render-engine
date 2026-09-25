@@ -1,6 +1,7 @@
 // api/submit-render.ts
 import { renderMediaOnLambda } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
+import { validateRenderInput } from '../src/lib/validate.js';
 
 export async function POST(request: Request): Promise<Response> {
   const key = request.headers.get('x-trs-render-key');
@@ -18,6 +19,11 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const validation = validateRenderInput(inputProps);
+  if (!validation.ok) {
+    return Response.json({ error: 'invalid input', details: validation.errors }, { status: 400 });
+  }
+
   const { renderId, bucketName } = await renderMediaOnLambda({
     region: process.env.REMOTION_REGION! as AwsRegion,
     functionName: process.env.REMOTION_FUNCTION_NAME!,
@@ -28,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
     ...(framesPerLambda !== undefined ? { framesPerLambda } : {}),
   });
 
-  return Response.json({ render_id: renderId, bucket_name: bucketName });
+  return Response.json({ render_id: renderId, bucket_name: bucketName, warnings: validation.warnings });
 }
 
 export const config = { runtime: 'nodejs' };
