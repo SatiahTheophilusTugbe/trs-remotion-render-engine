@@ -109,6 +109,28 @@ increase has been requested and was pending at the time of writing), so long vid
 either the quota increase or a larger `framesPerLambda`. Failure symptom: status `failed`
 with an error message starting `AWS Concurrency limit reached`.
 
+## framesPerLambda policy and length proof
+
+n8n (and `scripts/length-proof.mjs`) choose `framesPerLambda = Math.max(20, Math.ceil(totalFrames / 8))`,
+so invocations = `ceil(frames / framesPerLambda) + 1` <= 9 for videos up to ~1440 frames (48s at 30fps),
+staying under the account concurrency limit of 10. The script sums beat frames (an upper bound; transition
+overlap only lowers it) and aborts if the expected invocations exceed 9.
+
+Run the ~45s, 6-beat proof (avatar, broll, stat and a `cdn.nba.com` photo beat, music, transitions) through the live API.
+It needs the gitignored `out/proof-media.json`. In PowerShell from the repo folder:
+
+```
+$env:TRS_RENDER_API_KEY = Read-Host "Render key"
+node scripts/length-proof.mjs
+```
+
+It writes `out/length-props.json` and downloads `out/length-proof.mp4`.
+
+Decision gate: if chunks of ~170 frames hit the 120s Lambda timeout (`Timed out` / stitcher errors), stop.
+Options: redeploy the Lambda function with a longer timeout (`npx remotion lambda functions deploy --timeout=240 ...`,
+a new function name that requires updating `REMOTION_FUNCTION_NAME`) or wait for the concurrency quota approval to use
+smaller chunks. Measured wall-clock and the gate outcome: TBD after the human run.
+
 ## Testing a render directly on Lambda
 
 ```
