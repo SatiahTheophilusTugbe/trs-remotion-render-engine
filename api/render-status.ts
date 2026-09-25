@@ -2,6 +2,7 @@
 import { getRenderProgress } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
 import { redactMessage } from '../src/lib/redact.js';
+import { isRetryableAwsError } from '../src/lib/retryable.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -19,12 +20,22 @@ export async function GET(request: Request): Promise<Response> {
     return new Response('render_id and bucket_name are required', { status: 400 });
   }
 
-  const progress = await getRenderProgress({
-    renderId,
-    bucketName,
-    functionName: process.env.REMOTION_FUNCTION_NAME!,
-    region: process.env.REMOTION_REGION! as AwsRegion,
-  });
+  let progress;
+  try {
+    progress = await getRenderProgress({
+      renderId,
+      bucketName,
+      functionName: process.env.REMOTION_FUNCTION_NAME!,
+      region: process.env.REMOTION_REGION! as AwsRegion,
+    });
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    const error = redactMessage(raw);
+    if (isRetryableAwsError(err)) {
+      return Response.json({ status: 'unknown', retryable: true, error }, { status: 503 });
+    }
+    return Response.json({ status: 'error', retryable: false, error }, { status: 500 });
+  }
 
   if (progress.fatalErrorEncountered) {
     const first = progress.errors[0];

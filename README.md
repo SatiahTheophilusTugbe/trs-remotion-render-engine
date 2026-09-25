@@ -16,6 +16,15 @@ Response: `{ status: 'rendering' | 'done' | 'failed', progress: number, render_u
 When `status` is `failed`, the response also carries `error: { type, is_fatal, message } | null`
 (`message` is the first line of the underlying error only, never a stack trace; any URL in it is reduced to `<url:host>`, so only the host is shown).
 
+**Retry contract for `render-status`.** Polling can hit AWS throttling (`TooManyRequestsException`,
+`Rate Exceeded`, `ThrottlingException`) or transient network errors (timeouts, `ECONNRESET`, `fetch failed`).
+These return HTTP `503` with `{ status: 'unknown', retryable: true, error }`. This does NOT mean the render
+failed; the caller (n8n) must treat any 5xx as retryable, keep polling with backoff up to a cap
+(for example 5 consecutive 5xx), and only then give up. Any other unexpected error returns HTTP `500` with
+`{ status: 'error', retryable: false, error }`. `error` is always a single redacted line (URLs reduced to host,
+bot tokens hidden). A `401` (bad key) and `400` (missing params) are not retryable. The `rendering`, `done`
+and `failed` (HTTP 200) shapes are unchanged.
+
 `framesPerLambda` (optional, integer, minimum 5) sets how many frames each Lambda chunk
 renders: fewer, larger chunks mean fewer parallel Lambda invocations but a slower render,
 bounded by the function's 120s timeout. Omit it to use Remotion's default chunking. A
