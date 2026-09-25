@@ -116,7 +116,7 @@ so invocations = `ceil(frames / framesPerLambda) + 1` <= 9 for videos up to ~144
 staying under the account concurrency limit of 10. The script sums beat frames (an upper bound; transition
 overlap only lowers it) and aborts if the expected invocations exceed 9.
 
-Run the ~45s, 6-beat proof (avatar, broll, stat and a `cdn.nba.com` photo beat, music, transitions) through the live API.
+Run the ~58s, 7-beat proof (production target: 50s+ and at least 7 beats) (avatar, broll, stat and a `cdn.nba.com` photo beat, music, transitions) through the live API.
 It needs the gitignored `out/proof-media.json`. In PowerShell from the repo folder:
 
 ```
