@@ -155,7 +155,7 @@ Never run two renders at once. Prints the final output URL on success or `progre
 Since G4b it renders an **odometer stat** (`OdometerStat`): digit wheels roll up over at most 1.2s and
 land exactly on the target, over a dark semi-opaque backing panel, with a lime value and white label.
 The value auto-fits the card (`fitFontSize`), so long suffixes such as `27.4 PPG` or `$1,234.5M` are
-never clipped; the API still caps the formatted value at 7 characters. Leading zeros are hidden.
+never clipped; the API caps the formatted value at 11 characters. Leading zeros are hidden.
 
 **`transitions` prop** on `BeatSequence` (boolean, default `true`). Cuts are non-overlapping:
 they never change total duration and never shift any beat or audio. The style of the cut
@@ -224,7 +224,7 @@ Rules:
 - `avatar` beats need a non-empty `https://` `clip_url`. `broll` `clip_url` stays optional.
 - `photo_url`: EVERY beat (avatar, broll, stat) needs a non-empty `https://` string of at most 2000 chars. Missing, null, empty, non-https or too long is an ERROR (HTTP 400, e.g. `beat 2 (position 1): photo_url missing`); there is no fallback background and the message never echoes the URL. Photos are human-approved upstream, so a beat without one is a hard stop.
 - `overlay_text` is trimmed and clamped to 80 chars (ends with `…`, adds a warning).
-- `stat` beats need a `stat` object: finite `value`; non-empty `label` (clamped to 40 chars with a warning); `prefix`/`suffix` at most 3 chars; `decimals` an integer 0..2; the formatted value (e.g. `$1,234%`) must be at most 7 characters.
+- `stat` beats need a `stat` object: finite `value`; non-empty `label` (clamped to 40 chars with a warning); `prefix`/`suffix` at most 5 chars (e.g. `" PPG"`); `decimals` an integer 0..2; the formatted value (e.g. `$1,234.5M`) must be at most 11 characters.
 - `word_timings` passes through untouched.
 
 `warnings` is an array of non-fatal notices (clamped text); callers should log them. A non-JSON or non-object request body returns 400 `request body must be a JSON object`; a Lambda submit failure returns 502 `{ error: 'render submit failed', details: [<redacted first line>] }`. Beat error labels include the array position, e.g. `beat 1 (position 0)`.

@@ -21,8 +21,8 @@ const REQUIRED_FPS = 30;
 const MAX_URL_LEN = 2000;
 const MAX_OVERLAY = 80;
 const MAX_LABEL = 40;
-const MAX_AFFIX = 3;
-const MAX_STAT_CHARS = 7;
+const MAX_AFFIX = 5;
+const MAX_STAT_CHARS = 11;
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);

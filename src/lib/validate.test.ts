@@ -154,23 +154,23 @@ describe('validateRenderInput', () => {
     expect(r.warnings.join()).toMatch(/label/);
   });
 
-  it('stat prefix/suffix <= 3 chars; decimals integer 0..2', () => {
-    expect(errs(props([stat({ prefix: '1234' })])).join()).toMatch(/prefix/);
-    expect(errs(props([stat({ suffix: 'abcd' })])).join()).toMatch(/suffix/);
-    okRes(props([stat({ prefix: '$', suffix: 'ab' })]));
+  it('stat prefix/suffix <= 5 chars (allows " PPG"); decimals integer 0..2', () => {
+    expect(errs(props([stat({ prefix: '123456' })])).join()).toMatch(/prefix/);
+    expect(errs(props([stat({ suffix: 'abcdef' })])).join()).toMatch(/suffix/);
+    okRes(props([stat({ prefix: '$', suffix: ' PPG' })]));
     for (const d of [-1, 3, 1.5, '1']) {
       expect(errs(props([stat({ decimals: d })])).join()).toMatch(/decimals/);
     }
     for (const d of [0, 1, 2]) okRes(props([stat({ decimals: d })]));
   });
 
-  it('formatted stat must be <= 7 characters (sweep)', () => {
-    expect(errs(props([stat({ value: 1234567 })])).join()).toMatch(/formatted/); // "1,234,567"
-    expect(errs(props([stat({ value: 12345, suffix: 'abc' })])).join()).toMatch(/formatted/); // 9
-    expect(errs(props([stat({ value: 1.5, decimals: 2, prefix: 'abc', suffix: 'x' })])).join()).toMatch(/formatted/); // 8
-    okRes(props([stat({ value: 99999 })])); // "99,999" = 6
-    okRes(props([stat({ value: 12.5, decimals: 1, suffix: '%' })]));
-    okRes(props([stat({ value: 1234, suffix: '%' })])); // "1,234%" = 6
+  it('formatted stat must be <= 11 characters (OdometerStat autofits; "$99,999.9MM" = 11 is browser-verified)', () => {
+    expect(errs(props([stat({ value: 1234567890 })])).join()).toMatch(/formatted/); // "1,234,567,890" = 13
+    expect(errs(props([stat({ value: 12345, prefix: 'abc', suffix: 'abcd' })])).join()).toMatch(/formatted/); // 13
+    expect(errs(props([stat({ value: 123456, decimals: 2, prefix: '$', suffix: 'M' })])).join()).toMatch(/formatted/); // "$123,456.00M" = 12
+    okRes(props([stat({ value: 27.4, decimals: 1, suffix: ' PPG' })])); // "27.4 PPG" = 8
+    okRes(props([stat({ value: 1234.5, decimals: 1, prefix: '$', suffix: 'M' })])); // "$1,234.5M" = 9
+    okRes(props([stat({ value: 99999.9, decimals: 1, prefix: '$', suffix: 'MM' })])); // "$99,999.9MM" = 11
     okRes(props([stat({ value: 12345, suffix: 'k' })])); // "12,345k" = 7
   });
 
