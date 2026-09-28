@@ -114,8 +114,8 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
         errors.push(`${p}: stat beats require a stat object`);
       } else {
         const ns: Record<string, unknown> = { ...s };
-        const valueOk = typeof s.value === 'number' && Number.isFinite(s.value);
-        if (!valueOk) errors.push(`${p}: stat.value must be a finite number`);
+        const valueOk = typeof s.value === 'number' && Number.isFinite(s.value) && s.value >= 0;
+        if (!valueOk) errors.push(`${p}: stat.value must be a finite number >= 0`);
         if (typeof s.label !== 'string' || s.label.trim() === '') {
           errors.push(`${p}: stat.label must be a non-empty string`);
         } else {
@@ -134,9 +134,14 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
         const dec = s.decimals;
         const decOk = dec === undefined || (Number.isInteger(dec) && (dec as number) >= 0 && (dec as number) <= 2);
         if (!decOk) errors.push(`${p}: stat.decimals must be an integer 0..2`);
+        if (valueOk && decOk) {
+          // Round to the display precision so the odometer and formatStat always agree on the last digit.
+          const places = (dec as number | undefined) ?? 0;
+          ns.value = Math.round((s.value as number) * 10 ** places) / 10 ** places;
+        }
         if (valueOk && affixOk && decOk) {
           const f = formatStat(
-            s.value as number,
+            ns.value as number,
             (dec as number | undefined) ?? 0,
             (s.prefix as string | undefined) ?? '',
             (s.suffix as string | undefined) ?? '',

@@ -174,6 +174,18 @@ describe('validateRenderInput', () => {
     okRes(props([stat({ value: 12345, suffix: 'k' })])); // "12,345k" = 7
   });
 
+  it('stat.value must be >= 0 and is rounded to the display precision', () => {
+    expect(errs(props([stat({ value: -5 })])).join()).toMatch(/value/);
+    expect(errs(props([stat({ value: -0.4 })])).join()).toMatch(/value/);
+    const beatStat = (v: number, decimals: number) =>
+      (okRes(props([stat({ value: v, decimals })])).inputProps.beats[0] as unknown as { stat: { value: number } }).stat.value;
+    expect(beatStat(27.44, 1)).toBe(27.4);
+    expect(beatStat(27.46, 1)).toBe(27.5);
+    expect(beatStat(1250, 0)).toBe(1250);
+    expect(beatStat(1.005, 2)).toBe(1);
+    expect(beatStat(0, 0)).toBe(0);
+  });
+
   it('word_timings passes through untouched', () => {
     const wt = '[{"word":"a","start":0,"end":1}]';
     expect(okRes(props([broll({ word_timings: wt })])).inputProps.beats[0].word_timings).toBe(wt);
