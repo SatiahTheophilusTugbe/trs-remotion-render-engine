@@ -1,5 +1,6 @@
 import { AbsoluteFill, Img } from 'remotion';
 import type { CameraFrame } from '../lib/camera';
+import { PhotoGrade } from './PhotoGrade';
 
 export const BeatBackground: React.FC<{
   photoUrl: string | null | undefined;
@@ -36,22 +37,24 @@ export const BeatBackground: React.FC<{
     );
   }
   return (
-    <Img
-      src={photoUrl}
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover',
-        objectPosition,
-        transform: camera
-          ? `translate(${camera.translateXPct}%, ${camera.translateYPct}%) scale(${camera.scale})`
-          : scale !== undefined
-            ? `scale(${scale})`
-            : undefined,
-      }}
-    />
+    <PhotoGrade>
+      <Img
+        src={photoUrl}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          objectPosition,
+          transform: camera
+            ? `translate(${camera.translateXPct}%, ${camera.translateYPct}%) scale(${camera.scale})`
+            : scale !== undefined
+              ? `scale(${scale})`
+              : undefined,
+        }}
+      />
+    </PhotoGrade>
   );
 };

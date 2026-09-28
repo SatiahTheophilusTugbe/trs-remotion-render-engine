@@ -1,6 +1,7 @@
 import { AbsoluteFill, OffthreadVideo, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { AvatarBeatData } from '../types/beat';
 import { BeatBackground } from './BeatBackground';
+import { PhotoGrade } from './PhotoGrade';
 import { cameraFrameAt, type CameraMoveName } from '../lib/camera';
 import { framesForBeat } from '../lib/duration';
 
@@ -36,10 +37,12 @@ export const AvatarBeat: React.FC<{
             'linear-gradient(135deg, transparent 0%, rgba(0,0,0,0.35) 8%, #000 22%, #000 100%)',
         }}
       >
-        <OffthreadVideo
-          src={beat.clip_url}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
+        <PhotoGrade width={320} vignette={false}>
+          <OffthreadVideo
+            src={beat.clip_url}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </PhotoGrade>
       </div>
     </AbsoluteFill>
   );
