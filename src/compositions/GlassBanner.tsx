@@ -59,7 +59,7 @@ export const GlassBanner: React.FC<{ text: string }> = ({ text }) => {
           borderRadius: 32,
           padding: '40px 48px 40px 64px',
           background:
-            'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 100%), rgba(10,10,10,0.62)',
+            'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 100%), rgba(10,10,10,0.74)',
           border: '1px solid rgba(255,255,255,0.28)',
           backdropFilter: 'blur(22px)',
           WebkitBackdropFilter: 'blur(22px)',
