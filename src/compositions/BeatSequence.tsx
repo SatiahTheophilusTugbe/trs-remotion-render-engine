@@ -4,6 +4,7 @@ import { AvatarBeat } from './AvatarBeat';
 import { BrollBeat } from './BrollBeat';
 import { StatRevealBeat } from './StatRevealBeat';
 import { layoutBeats } from '../lib/layout';
+import { assignCameraMoves, type CameraMoveName } from '../lib/camera';
 import { parseWordTimings } from '../lib/captions';
 import { GlassBanner } from './GlassBanner';
 import { BrandBadges } from './BrandBadges';
@@ -13,14 +14,14 @@ import { TransitionLayer } from './TransitionLayer';
 import { cutStyleFor, wipeCutFrames } from '../lib/cuts';
 import { SlideShakeCut } from './SlideShakeCut';
 
-const renderBeat = (beat: Beat, fps: number) => {
+const renderBeat = (beat: Beat, fps: number, cameraMove: CameraMoveName) => {
   switch (beat.type) {
     case 'avatar':
-      return <AvatarBeat beat={beat} />;
+      return <AvatarBeat beat={beat} cameraMove={cameraMove} />;
     case 'broll':
-      return <BrollBeat beat={beat} fps={fps} />;
+      return <BrollBeat beat={beat} fps={fps} cameraMove={cameraMove} />;
     case 'stat':
-      return <StatRevealBeat beat={beat} />;
+      return <StatRevealBeat beat={beat} cameraMove={cameraMove} />;
     default: {
       const unreachable: never = beat;
       throw new Error(`Unknown beat type: ${String((unreachable as { type?: string }).type)}`);
@@ -37,6 +38,7 @@ export const BeatSequence: React.FC<{
 }> = ({ beats, leagueBadge, musicUrl, transitions }) => {
   const { fps } = useVideoConfig();
   const slots = layoutBeats(beats, fps);
+  const cameraMoves = assignCameraMoves(beats);
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
       {beats.map((beat, index) => {
@@ -50,7 +52,7 @@ export const BeatSequence: React.FC<{
             {(() => {
               const content = (
                 <>
-                  {renderBeat(beat, fps)}
+                  {renderBeat(beat, fps, cameraMoves[index])}
                   {beat.type === 'broll' && beat.overlay_text ? <GlassBanner text={beat.overlay_text} /> : null}
                   {(() => {
                     const words = parseWordTimings(beat.word_timings);

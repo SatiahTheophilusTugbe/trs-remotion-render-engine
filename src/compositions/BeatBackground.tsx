@@ -1,10 +1,16 @@
 import { AbsoluteFill, Img } from 'remotion';
+import type { CameraFrame } from '../lib/camera';
 
 export const BeatBackground: React.FC<{
   photoUrl: string | null | undefined;
   objectPosition: string;
+  camera?: CameraFrame;
+  /**
+   * @deprecated Superseded by `camera`. Retained only so the src/bakeoff/ prototype
+   * tooling (out of scope for this task) keeps compiling/rendering unchanged.
+   */
   scale?: number;
-}> = ({ photoUrl, objectPosition, scale = 1 }) => {
+}> = ({ photoUrl, objectPosition, camera, scale }) => {
   if (!photoUrl) {
     return (
       <AbsoluteFill
@@ -40,7 +46,11 @@ export const BeatBackground: React.FC<{
         height: '100%',
         objectFit: 'cover',
         objectPosition,
-        transform: `scale(${scale})`,
+        transform: camera
+          ? `translate(${camera.translateXPct}%, ${camera.translateYPct}%) scale(${camera.scale})`
+          : scale !== undefined
+            ? `scale(${scale})`
+            : undefined,
       }}
     />
   );

@@ -1,11 +1,25 @@
-import { AbsoluteFill, OffthreadVideo } from 'remotion';
+import { AbsoluteFill, OffthreadVideo, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { AvatarBeatData } from '../types/beat';
 import { BeatBackground } from './BeatBackground';
+import { cameraFrameAt, type CameraMoveName } from '../lib/camera';
+import { framesForBeat } from '../lib/duration';
 
-export const AvatarBeat: React.FC<{ beat: AvatarBeatData }> = ({ beat }) => {
+export const AvatarBeat: React.FC<{
+  beat: AvatarBeatData;
+  /**
+   * Defaults to 'zoomIn' so src/bakeoff/ prototypes that render this component directly
+   * (out of scope for this task) keep working without threading a camera assignment through.
+   */
+  cameraMove?: CameraMoveName;
+}> = ({ beat, cameraMove = 'zoomIn' }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const durationInFrames = framesForBeat(beat, fps);
+  const camera = cameraFrameAt(cameraMove, frame, durationInFrames);
+
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
-      <BeatBackground photoUrl={beat.photo_url} objectPosition="center top" />
+      <BeatBackground photoUrl={beat.photo_url} objectPosition="center top" camera={camera} />
       <div
         style={{
           position: 'absolute',
