@@ -1,5 +1,5 @@
 // scripts/test-render.mjs
-// Usage: node --env-file=.env scripts/test-render.mjs [short|full|g4|g4b]
+// Usage: node --env-file=.env scripts/test-render.mjs [short|full|g4|g4b|g4c]
 // Renders the real BeatSequence composition directly on Lambda (bypasses the Vercel API).
 import { renderMediaOnLambda, getRenderProgress } from '@remotion/lambda/client';
 import { readFileSync } from 'node:fs';
@@ -7,8 +7,8 @@ import { readFileSync } from 'node:fs';
 const manifest = JSON.parse(readFileSync(new URL('../deploy-manifest.json', import.meta.url)));
 
 const mode = process.argv[2] ?? 'short';
-if (mode !== 'short' && mode !== 'full' && mode !== 'g4' && mode !== 'g4b') {
-  console.error('Usage: node --env-file=.env scripts/test-render.mjs [short|full|g4|g4b]');
+if (!['short', 'full', 'g4', 'g4b', 'g4c'].includes(mode)) {
+  console.error('Usage: node --env-file=.env scripts/test-render.mjs [short|full|g4|g4b|g4c]');
   process.exit(1);
 }
 
@@ -72,13 +72,59 @@ if (mode === 'g4b') {
   ];
 }
 
+if (mode === 'g4c') {
+  // G4c proof: camera-movement pool (Task 1-2) + the permanent G3 grade (Task 3) exercised
+  // together in one real render, at full production shape.
+  //
+  // Only ONE real (fetchable) placeholder photo exists anywhere in this repo (PHOTO_URL above,
+  // also the sole photo in src/Root.tsx's defaultBeats) -- there is no second placeholder image
+  // to reuse, so every beat below reuses it rather than introducing an unverified new URL into a
+  // real, billed Lambda render. Every beat still gets a non-null photo_url per the API's
+  // no-fallback rule.
+  //
+  // 8 beats (indices 0-7) so assignCameraMoves (seeded purely by array index, see src/lib/camera.ts)
+  // walks the full 6-move pool with no immediate repeat: zoomOut, panUp, panRight, panUp, panDown,
+  // panRight, panLeft, zoomIn.
+  //
+  // Cuts (cutStyleFor: incoming stat beat or last beat = impact slide-push; else lime wipe):
+  // index1 broll=wipe, index2 broll=wipe, index3 stat=IMPACT, index4 broll=wipe, index5 stat=IMPACT,
+  // index6 broll=wipe, index7 avatar (last beat)=IMPACT. That's 4 lime wipes and 3 impact cuts.
+  const base = { photo_url: PHOTO_URL, narration_line: 'Real Lambda G4c proof beat.' };
+  beats = [
+    { ...base, type: 'avatar', clip_url: CLIP_URL, overlay_text: '', duration_sec: 5, beat_index: 0 },
+    { ...base, type: 'broll', audio_url: AUDIO_URL, overlay_text: 'G4c camera + grade proof', duration_sec: 4, beat_index: 1 },
+    { ...base, type: 'broll', audio_url: AUDIO_URL, overlay_text: 'Second banner beat', duration_sec: 4, beat_index: 2 },
+    { ...base, type: 'stat', audio_url: AUDIO_URL, overlay_text: '', duration_sec: 3, beat_index: 3, stat: { value: 27.4, suffix: ' PPG', decimals: 1, label: 'Points per game' } },
+    { ...base, type: 'broll', audio_url: AUDIO_URL, overlay_text: 'Third banner beat', duration_sec: 4, beat_index: 4 },
+    { ...base, type: 'stat', audio_url: AUDIO_URL, overlay_text: '', duration_sec: 3, beat_index: 5, stat: { value: 1234.5, prefix: '$', suffix: 'M', decimals: 1, label: 'Contract value' } },
+    { ...base, type: 'broll', audio_url: AUDIO_URL, overlay_text: 'Fourth banner beat', duration_sec: 4, beat_index: 6 },
+    { ...base, type: 'avatar', clip_url: CLIP_URL, overlay_text: '', duration_sec: 6, beat_index: 7 },
+  ];
+}
+
 const FPS = 30;
 const totalFrames = beats.reduce((sum, b) => sum + Math.round(b.duration_sec * FPS), 0);
 // Concurrency quota is 40. Never run two renders at once. invocations = ceil(frames/fpl)+1 <= 25.
-const g4bFramesPerLambda = Math.max(20, Math.ceil(totalFrames / 24));
+const autoFramesPerLambda = Math.max(20, Math.ceil(totalFrames / 24));
 console.log(`Mode: ${mode} (${beats.length} beats, ${totalFrames} frames)`);
 if (mode === 'g4b') {
-  console.log(`framesPerLambda: ${g4bFramesPerLambda}, invocations: ${Math.ceil(totalFrames / g4bFramesPerLambda) + 1}`);
+  console.log(`framesPerLambda: ${autoFramesPerLambda}, invocations: ${Math.ceil(totalFrames / autoFramesPerLambda) + 1}`);
+}
+if (mode === 'g4c') {
+  const invocations = Math.ceil(totalFrames / autoFramesPerLambda) + 1;
+  console.log(
+    `beats: ${beats.length}, totalFrames: ${totalFrames}, framesPerLambda: ${autoFramesPerLambda}, invocations: ${invocations}`,
+  );
+  // Sane ceiling matching the brief's spirit (quota is 40; the framesPerLambda formula already
+  // keeps this <= 25 for any video up to the 180s API cap, but abort defensively if some future
+  // edit to this mode pushes it past a safe margin).
+  const MAX_SANE_INVOCATIONS = 30;
+  if (invocations > MAX_SANE_INVOCATIONS) {
+    console.error(
+      `Aborting: ${invocations} invocations exceeds the sane ceiling of ${MAX_SANE_INVOCATIONS} (quota is 40; never run two renders at once).`,
+    );
+    process.exit(1);
+  }
 }
 
 const { renderId, bucketName } = await renderMediaOnLambda({
@@ -92,7 +138,8 @@ const { renderId, bucketName } = await renderMediaOnLambda({
   // g4: 330 frames / 60 = 6 chunks + 1 = 7 invocations.
   ...(mode === 'full' ? { framesPerLambda: 45 } : {}),
   ...(mode === 'g4' ? { framesPerLambda: 60 } : {}),
-  ...(mode === 'g4b' ? { framesPerLambda: g4bFramesPerLambda } : {}),
+  ...(mode === 'g4b' ? { framesPerLambda: autoFramesPerLambda } : {}),
+  ...(mode === 'g4c' ? { framesPerLambda: autoFramesPerLambda } : {}),
 });
 
 console.log('renderId:', renderId, 'bucketName:', bucketName);
