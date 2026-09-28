@@ -13,7 +13,7 @@ if (!key) {
 }
 
 const FPS = 30;
-const MAX_INVOCATIONS = 9;
+const MAX_INVOCATIONS = 35;
 const fixture = JSON.parse(readFileSync('src/fixtures/real-story-ballmer.json', 'utf8'));
 const avatar = fixture.find((b) => b.type === 'avatar');
 const broll = fixture.find((b) => b.type === 'broll');
@@ -47,7 +47,7 @@ const beats = [
 
 const totalSec = beats.reduce((s, b) => s + b.duration_sec, 0);
 const totalFrames = beats.reduce((s, b) => s + Math.round(b.duration_sec * FPS), 0);
-const framesPerLambda = Math.max(20, Math.ceil(totalFrames / 8));
+const framesPerLambda = Math.max(20, Math.ceil(totalFrames / 24));
 const invocations = Math.ceil(totalFrames / framesPerLambda) + 1;
 console.log(`beats=${beats.length} totalSec=${totalSec.toFixed(1)} totalFrames=${totalFrames} framesPerLambda=${framesPerLambda} expectedInvocations=${invocations}`);
 // Production target (user, 2026-09-25): videos anchor around 50+ seconds with at least 7 beats.
@@ -56,7 +56,7 @@ if (beats.length < 7 || totalSec < 50) {
   process.exit(1);
 }
 if (invocations > MAX_INVOCATIONS) {
-  console.error(`Abort: ${invocations} invocations exceeds the ${MAX_INVOCATIONS} limit (concurrency cap 10).`);
+  console.error(`Abort: ${invocations} invocations exceeds the ${MAX_INVOCATIONS} limit (account concurrency quota is 40; keep headroom for status polls).`);
   process.exit(1);
 }
 

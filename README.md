@@ -111,10 +111,11 @@ with an error message starting `AWS Concurrency limit reached`.
 
 ## framesPerLambda policy and length proof
 
-n8n (and `scripts/length-proof.mjs`) choose `framesPerLambda = Math.max(20, Math.ceil(totalFrames / 8))`,
-so invocations = `ceil(frames / framesPerLambda) + 1` <= 9 for videos up to ~1440 frames (48s at 30fps),
-staying under the account concurrency limit of 10. The script sums beat frames (an upper bound; transition
-overlap only lowers it) and aborts if the expected invocations exceed 9.
+n8n (and `scripts/length-proof.mjs`) choose `framesPerLambda = Math.max(20, Math.ceil(totalFrames / 24))`,
+so invocations = `ceil(frames / framesPerLambda) + 1` <= 25 for any video, staying well under the account
+concurrency quota of 40 (raised from 10 on 2026-09-28; leaves headroom because each status poll also invokes
+Lambda). Never run two renders at once. The script sums beat frames (an upper bound; transition overlap only
+lowers it) and aborts if the expected invocations exceed 35.
 
 Run the ~58s, 7-beat proof (production target: 50s+ and at least 7 beats) (avatar, broll, stat and a `cdn.nba.com` photo beat, music, transitions) through the live API.
 It needs the gitignored `out/proof-media.json`. In PowerShell from the repo folder:
