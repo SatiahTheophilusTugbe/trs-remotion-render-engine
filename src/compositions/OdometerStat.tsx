@@ -27,6 +27,7 @@ import {
   STAT_PANEL_MAX_W,
   fitLabel,
   fitStatFontSize,
+  leadingHiddenEm,
 } from '../lib/statFit';
 import { montserratBold } from '../lib/fonts';
 
@@ -137,6 +138,7 @@ export const OdometerStat: React.FC<{ stat: StatData }> = ({ stat }) => {
   const affixSize = fontSize * AFFIX_RATIO;
   const affixGap = Math.round(fontSize * AFFIX_GAP_EM);
   const labelFit = fitLabel(label, STAT_INNER_W);
+  const template = number;
 
   // Count-up: out-cubic, exactly COUNT_UP_SECONDS long, exactly 1 at the end.
   const progress = countUpValue(frame, fps, 1, COUNT_UP_SECONDS);
@@ -151,6 +153,10 @@ export const OdometerStat: React.FC<{ stat: StatData }> = ({ stat }) => {
     extrapolateRight: 'clamp',
     easing: Easing.out(Easing.cubic),
   });
+  // Prefix hugs the first VISIBLE digit: slide it over the hidden leading-zero columns.
+  const prefixShift =
+    fontSize *
+    leadingHiddenEm(template, columnVisibility(template, odometerUnits(value, decimals, progress), decimals));
   const glow = 0.55 + 0.25 * Math.sin(frame * 0.09);
 
   return (
@@ -191,7 +197,16 @@ export const OdometerStat: React.FC<{ stat: StatData }> = ({ stat }) => {
             }}
           >
             {prefix ? (
-              <span style={{ fontSize: affixSize, marginRight: affixGap, whiteSpace: 'pre' }}>{prefix}</span>
+              <span
+                style={{
+                  fontSize: affixSize,
+                  marginRight: affixGap,
+                  whiteSpace: 'pre',
+                  transform: `translateX(${prefixShift}px)`,
+                }}
+              >
+                {prefix}
+              </span>
             ) : null}
             <RollingNumber progress={progress} target={value} decimals={decimals} fontSize={fontSize} />
             {suffix ? (

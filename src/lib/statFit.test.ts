@@ -9,10 +9,11 @@ import {
   fitFontSize,
   fitLabel,
   fitStatFontSize,
+  leadingHiddenEm,
   statWidthEm,
   textWidthEm,
 } from './statFit';
-import { formatStat } from './stat';
+import { COUNT_UP_SECONDS, columnVisibility, countUpValue, formatStat, odometerUnits } from './stat';
 
 describe('fitFontSize', () => {
   const widest = ['W', 'M', '8', '$', 'm', '%'];
@@ -117,6 +118,45 @@ describe('fitLabel', () => {
       const { fontSize } = fitLabel('W'.repeat(len), STAT_INNER_W);
       expect(fontSize).toBeLessThanOrEqual(prev);
       prev = fontSize;
+    }
+  });
+});
+
+describe('leadingHiddenEm (prefix hugs the first visible digit)', () => {
+  it('sums the widths of the hidden leading columns only', () => {
+    expect(leadingHiddenEm('1,234.5', [true, true, true, true, true, true, true])).toBe(0);
+    expect(leadingHiddenEm('1,234.5', [false, false, false, false, true, true, true])).toBeCloseTo(
+      3 * DIGIT_EM + SEP_EM,
+      10,
+    );
+    // a later hidden column (never produced by columnVisibility) does not count
+    expect(leadingHiddenEm('12', [true, false])).toBe(0);
+  });
+
+  it('sweep: offset is >= 0, never grows during the count-up, is 0 at the end, and stays inside the row', () => {
+    const fps = 30;
+    const total = Math.round(COUNT_UP_SECONDS * fps);
+    const cases: Array<[number, number]> = [
+      [27.4, 1],
+      [1250, 0],
+      [1234.5, 1],
+      [99999.9, 1],
+      [1999, 0],
+      [8888888.88, 2],
+    ];
+    for (const [target, decimals] of cases) {
+      const template = formatStat(target, decimals);
+      const rowEm = textWidthEm(template);
+      let prev = Infinity;
+      for (let f = 0; f <= total + 10; f++) {
+        const units = odometerUnits(target, decimals, countUpValue(f, fps, 1));
+        const off = leadingHiddenEm(template, columnVisibility(template, units, decimals));
+        expect(off).toBeGreaterThanOrEqual(0);
+        expect(off).toBeLessThan(rowEm);
+        expect(off).toBeLessThanOrEqual(prev + 1e-9);
+        prev = off;
+      }
+      expect(prev).toBe(0);
     }
   });
 });

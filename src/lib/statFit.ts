@@ -97,3 +97,16 @@ export const fitLabel = (label: string, maxWidthPx: number): { fontSize: number;
     lines: 2,
   };
 };
+
+// Width (em of the digit size) of the hidden LEADING odometer columns (leading-zero digits and the
+// commas that follow only hidden digits). The prefix is translated right by this much so it hugs
+// the first visible digit while the number itself stays fixed (right-aligned, exactly centred at
+// the end). `visible` is the per-template-character mask from columnVisibility.
+export const leadingHiddenEm = (template: string, visible: boolean[]): number => {
+  let em = 0;
+  for (let i = 0; i < template.length; i++) {
+    if (visible[i]) break;
+    em += charEm(template[i]);
+  }
+  return em;
+};

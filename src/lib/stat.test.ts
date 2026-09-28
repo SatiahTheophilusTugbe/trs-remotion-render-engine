@@ -6,6 +6,7 @@ import {
   formatStat,
   odometerText,
   odometerUnits,
+  wheelPos,
 } from './stat';
 
 describe('countUpValue', () => {
@@ -99,5 +100,71 @@ describe('odometer display (sweep every frame)', () => {
     expect(columnVisibility(template, 0, 1)).toEqual([false, false, false, false, true, true, true]);
     expect(columnVisibility(template, 12345, 1)).toEqual([true, true, true, true, true, true, true]);
     expect(columnVisibility(template, 55, 1)).toEqual([false, false, false, false, true, true, true]);
+  });
+});
+
+describe('odometer wheels settle on exact integers (trailing-9 regression)', () => {
+  const fps = 30;
+  const total = Math.round(COUNT_UP_SECONDS * fps);
+  const targets: Array<[number, number]> = [
+    [19, 0],
+    [29, 0],
+    [199, 0],
+    [1999, 0],
+    [1299, 0],
+    [9.9, 1],
+    [29.9, 1],
+    [99.9, 1],
+    [99999.9, 1],
+    [999999, 0],
+    [0, 0],
+    [1250, 0],
+    [27.4, 1],
+    [1234.5, 1],
+  ];
+  const digitsOf = (target: number, decimals: number): string =>
+    formatStat(target, decimals).replace(/[^0-9]/g, '');
+
+  it('at the final frame and after, EVERY wheel is an integer equal to its template digit', () => {
+    for (const [target, decimals] of targets) {
+      const digits = digitsOf(target, decimals);
+      for (let f = total; f <= total + 30; f++) {
+        const units = odometerUnits(target, decimals, countUpValue(f, fps, 1));
+        for (let idx = 0; idx < digits.length; idx++) {
+          const place = digits.length - 1 - idx;
+          const pos = wheelPos(units, place);
+          expect(Number.isInteger(pos), `${target} place ${place} pos ${pos}`).toBe(true);
+          expect(pos, `${target} place ${place}`).toBe(Number(digits[idx]));
+        }
+        expect(odometerText(target, decimals, units)).toBe(formatStat(target, decimals));
+      }
+    }
+  });
+
+  it('on EVERY frame the settled digits equal floor(units) and never exceed the target', () => {
+    for (const [target, decimals] of targets) {
+      const finalUnits = Math.round(target * 10 ** decimals);
+      let prev = -1;
+      for (let f = 0; f <= total + 10; f++) {
+        const units = odometerUnits(target, decimals, countUpValue(f, fps, 1));
+        const shown = Number(odometerText(target, decimals, units).replace(/[^0-9]/g, ''));
+        expect(shown, `${target} frame ${f}`).toBe(Math.floor(units));
+        expect(shown).toBeGreaterThanOrEqual(prev);
+        expect(shown).toBeLessThanOrEqual(finalUnits);
+        prev = shown;
+      }
+    }
+  });
+
+  it('a higher wheel only moves while the wheel below is between 9 and 10', () => {
+    // 19.5 units: ones wheel is mid-roll 9 -> 0, so the tens wheel is half way 1 -> 2.
+    expect(wheelPos(19.5, 0)).toBeCloseTo(9.5, 10);
+    expect(wheelPos(19.5, 1)).toBeCloseTo(1.5, 10);
+    // 12.7 units: ones wheel is at 2.7, tens wheel must sit exactly on 1.
+    expect(wheelPos(12.7, 1)).toBe(1);
+    // 199 settled: 1, 9, 9 exactly.
+    expect([2, 1, 0].map((p) => wheelPos(199, p))).toEqual([1, 9, 9]);
+    // 199.9: ones 9.9, tens 9.9 (carry from 9.9), hundreds 1.9.
+    expect(wheelPos(199.9, 2)).toBeCloseTo(1.9, 10);
   });
 });

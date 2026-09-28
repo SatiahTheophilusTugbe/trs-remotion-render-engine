@@ -25,14 +25,15 @@ export const formatStat = (value: number, decimals = 0, prefix = '', suffix = ''
 export const odometerUnits = (target: number, decimals: number, progress: number): number =>
   Math.round(Math.abs(target) * 10 ** decimals) * progress;
 
-// Wheel position (0..10) of the digit at decimal `place` (0 = smallest unit). Higher wheels only
-// turn while the wheel below rolls 9 -> 0, so digits lock one column at a time (odometer).
+// Wheel position (0..10) of the digit at decimal `place` (0 = smallest unit). The smallest wheel
+// spins continuously; every higher wheel sits on its integer digit and only turns while the wheel
+// directly below is rolling from 9 to 0 (carry = how far that wheel is past 9). Settled values
+// therefore always give exact integers.
 export const wheelPos = (units: number, place: number): number => {
-  const q = Math.max(0, units) / 10 ** place;
-  const whole = Math.floor(q);
-  const frac = q - whole;
-  const carry = place === 0 ? frac : Math.min(1, Math.max(0, frac * 10 - 9));
-  return (whole % 10) + carry;
+  const u = Math.max(0, units);
+  if (place === 0) return u % 10;
+  const digit = Math.floor(u / 10 ** place) % 10;
+  return digit + Math.max(0, wheelPos(u, place - 1) - 9);
 };
 
 // Which template characters are visible at the current value. Leading zero columns are hidden
