@@ -58,11 +58,11 @@ if (mode === 'g4') {
 if (mode === 'g4b') {
   // G4b premium-pass proof, full production target shape: 7 beats, 51s (1530 frames).
   // Cuts (frame = start of incoming beat): lime wipe at 240, 480, 870; slide-push+shake impact cuts at 690 (stat),
-  // 1050 (stat) and 1230 (last beat).
+  // 1080 (stat) and 1260 (last beat).
   const base = { photo_url: PHOTO_URL, narration_line: 'Real Lambda G4b proof beat.' };
-  const LONG_OVERLAY = 'Real Lambda G4b proof: a deliberately long overlay line that hits the 80 char cap';
+  const LONG_OVERLAY = 'Real Lambda G4b proof: a deliberately long overlay line that hits the char cap'; // 78 chars, near the 80 cap
   beats = [
-    { ...base, type: 'broll', audio_url: AUDIO_URL, overlay_text: LONG_OVERLAY.slice(0, 80), duration_sec: 8, beat_index: 0 },
+    { ...base, type: 'broll', audio_url: AUDIO_URL, overlay_text: LONG_OVERLAY, duration_sec: 8, beat_index: 0 },
     { ...base, type: 'avatar', clip_url: CLIP_URL, overlay_text: '', duration_sec: 8, beat_index: 1 },
     { ...base, type: 'broll', audio_url: AUDIO_URL, overlay_text: 'Second banner, short line', duration_sec: 7, beat_index: 2 },
     { ...base, type: 'stat', audio_url: AUDIO_URL, overlay_text: '', duration_sec: 6, beat_index: 3, stat: { value: 27.4, suffix: ' PPG', decimals: 1, label: 'Points per game' } },

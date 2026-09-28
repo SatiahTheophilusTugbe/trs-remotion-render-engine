@@ -135,22 +135,27 @@ smaller chunks. Measured wall-clock and the gate outcome: TBD after the human ru
 ## Testing a render directly on Lambda
 
 ```
-node --env-file=.env scripts/test-render.mjs [short|full|g4]
+node --env-file=.env scripts/test-render.mjs [short|full|g4|g4b]
 ```
 
 Renders the real `BeatSequence` composition straight on Lambda, bypassing the Vercel API.
 `short` (default) is a 2s avatar + 2s broll beat with default chunking; `full` is a 5s +
 4s (270 frame) render using `framesPerLambda: 45` to stay under the concurrency limit.
 `g4` is avatar 4s + stat 3s + broll 4s (330 frames, `framesPerLambda: 60`, 7 invocations) and
-exercises the stat beat and both wipe transitions. Prints the final output URL on success or `progress.errors` on failure.
+exercises the stat beat and both wipe transitions. `g4b` is the G4b premium-pass proof at full production
+shape: 7 beats / 51s / 1530 frames (broll with an ~80-char banner, avatar, broll, stat `27.4 PPG`, broll, stat
+`$1,234.5M`, avatar) using `framesPerLambda = max(20, ceil(frames/24))` (64 -> 25 invocations, under the 40 quota);
+it shows lime wipes, both slide-push impact cuts into stats and the last beat, the glass banner and the odometer.
+Never run two renders at once. Prints the final output URL on success or `progress.errors` on failure.
 
 ## Stat beat and transitions (G4)
 
 **`stat` beat** (additive; `avatar`/`broll` beats are unchanged). Fields:
 `{ type: 'stat', photo_url, audio_url?, overlay_text?, narration_line, duration_sec, beat_index, stat: { value: number, label: string, prefix?: string, suffix?: string, decimals?: number } }`.
-It renders a count-up stat card (lime `#CCFF00` value, white label) over the photo. Keep
-the rendered `value` (including prefix/suffix and separators) to about 7 characters or
-fewer so it fits the card. The upstream pipeline does not emit `stat` beats yet.
+Since G4b it renders an **odometer stat** (`OdometerStat`): digit wheels roll up over at most 1.2s and
+land exactly on the target, over a dark semi-opaque backing panel, with a lime value and white label.
+The value auto-fits the card (`fitFontSize`), so long suffixes such as `27.4 PPG` or `$1,234.5M` are
+never clipped; the API still caps the formatted value at 7 characters. Leading zeros are hidden.
 
 **`transitions` prop** on `BeatSequence` (boolean, default `true`). Cuts are non-overlapping:
 they never change total duration and never shift any beat or audio. The style of the cut
@@ -159,9 +164,13 @@ an **impact cut** (slide-push + landing shake + brief white flash, `SlideShakeCu
 incoming beat is a `stat` beat or the last beat; otherwise the default **lime wipe** (the
 cut frame is fully lime). Pass `transitions: false` to disable both styles.
 
-**Current site:** `trs-remotion-g4-8df37ac` (see `deploy-manifest.json`). The live API keeps
-rendering the previous site (`trs-remotion-g3-bbfa0ca`) until the human updates
-`REMOTION_SERVE_URL`:
+**Banner (G4b):** `overlay_text` renders as a `GlassBanner`: a frosted-glass card at the TOP under the
+brand badges (`backdrop-filter` blur, base alpha 0.74, lime accent bar) that slides in, holds and exits.
+Verified on real Lambda that the backdrop blur renders and the text stays readable.
+
+**Current site:** `trs-remotion-g4b-4e92486` (see `deploy-manifest.json`; composition code at commit
+`4e92486`). The live API keeps rendering the previous site (`trs-remotion-g4-8df37ac`) until the human
+updates `REMOTION_SERVE_URL`:
 
 ```
 npx vercel env rm REMOTION_SERVE_URL production
