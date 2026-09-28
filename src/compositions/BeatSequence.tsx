@@ -5,7 +5,7 @@ import { BrollBeat } from './BrollBeat';
 import { StatRevealBeat } from './StatRevealBeat';
 import { layoutBeats } from '../lib/layout';
 import { parseWordTimings } from '../lib/captions';
-import { OverlayBanner } from './OverlayBanner';
+import { GlassBanner } from './GlassBanner';
 import { BrandBadges } from './BrandBadges';
 import { MusicBed } from './MusicBed';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from './CaptionLayer';
@@ -51,7 +51,7 @@ export const BeatSequence: React.FC<{
               const content = (
                 <>
                   {renderBeat(beat, fps)}
-                  {beat.type === 'broll' && beat.overlay_text ? <OverlayBanner text={beat.overlay_text} /> : null}
+                  {beat.type === 'broll' && beat.overlay_text ? <GlassBanner text={beat.overlay_text} /> : null}
                   {(() => {
                     const words = parseWordTimings(beat.word_timings);
                     const show = words.length > 0 && (beat.type !== 'avatar' || CAPTIONS_ON_AVATAR);

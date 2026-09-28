@@ -1,5 +1,7 @@
 import { useCurrentFrame, useVideoConfig } from 'remotion';
 import { montserratBold } from '../lib/fonts';
+// Bake-off baseline (B1): the pre-G4b production banner, kept only so the owner can re-compare.
+// Production no longer imports this; see src/compositions/GlassBanner.tsx.
 
 export const BANNER_MAX_SECONDS = 4;
 export const BANNER_TOP = 90; // design decision 3: below the corner-badge row

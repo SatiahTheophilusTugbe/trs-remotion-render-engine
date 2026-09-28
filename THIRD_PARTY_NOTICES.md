@@ -7,7 +7,8 @@
 - License: MIT
 
 Techniques (easing curves, blur, geometry, timing) were ported and re-skinned for TRS in the
-prototype-only bake-off code under `src/bakeoff/` (never deployed). Each ported file keeps the
+prototype-only bake-off code under `src/bakeoff/` (never deployed), and the glass lower-third was
+then promoted into production as `src/compositions/GlassBanner.tsx`. Each ported file keeps the
 upstream SPDX header:
 
 | File | Upstream component |
@@ -16,6 +17,7 @@ upstream SPDX header:
 | `src/bakeoff/fx/IrisFx.tsx` | `transition-circle-wipe/TransitionCircleWipe.tsx` |
 | `src/bakeoff/fx/SlideShakeFx.tsx` | `slide-wipe/SlideWipe.tsx`, `camera-shake/CameraShake.tsx` |
 | `src/bakeoff/GlassLowerThird.tsx` | `lower-third-glass-card/LowerThirdGlassCard.tsx` |
+| `src/compositions/GlassBanner.tsx` (production) | `lower-third-glass-card/LowerThirdGlassCard.tsx` |
 | `src/bakeoff/KpiStat.tsx` | `kpi-counter/KpiCounter.tsx` |
 | `src/bakeoff/ParallaxPhoto.tsx` | `parallax-pan/ParallaxPan.tsx` (idea) |
 

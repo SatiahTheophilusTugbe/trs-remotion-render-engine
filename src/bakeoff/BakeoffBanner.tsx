@@ -1,5 +1,5 @@
 import { AbsoluteFill } from 'remotion';
-import { OverlayBanner } from '../compositions/OverlayBanner';
+import { OverlayBanner } from './OverlayBanner';
 import { BeatContent, SegmentRunner, storyBeat } from './shared';
 import type { Segment } from './shared';
 import { GlassLowerThird } from './GlassLowerThird';

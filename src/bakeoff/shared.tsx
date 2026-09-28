@@ -4,7 +4,7 @@ import type { Beat } from '../types/beat';
 import { AvatarBeat } from '../compositions/AvatarBeat';
 import { BrollBeat } from '../compositions/BrollBeat';
 import { StatRevealBeat } from '../compositions/StatRevealBeat';
-import { OverlayBanner } from '../compositions/OverlayBanner';
+import { OverlayBanner } from './OverlayBanner';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from '../compositions/CaptionLayer';
 import { BrandBadges } from '../compositions/BrandBadges';
 import { MusicBed } from '../compositions/MusicBed';

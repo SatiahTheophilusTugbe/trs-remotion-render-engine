@@ -89,7 +89,7 @@ the start of that beat**. Invalid or unparseable values are ignored (no captions
 What is rendered:
 
 - **Captions:** words are shown four at a time (a fixed pager) in bold Montserrat, white with a black stroke; the currently spoken word is highlighted lime (`#CCFF00`). Captions are drawn on both `broll` and `avatar` beats when `word_timings` is present, and a page stays visible through gaps shorter than 0.25 s between word pages (no blinking) but disappears during real pauses. On broll beats they sit near the bottom; on avatar beats they sit above the corner avatar box.
-- **Banner:** a `broll` beat's `overlay_text` is shown as a banner near the top (below the badge row) for the first 4 seconds of that beat only. Avatar beats do not show a banner.
+- **Banner:** a `broll` beat's `overlay_text` is shown as a frosted-glass card (spring slide-in from the left, lime accent bar, gentle glow, slide-out at 4s) near the top (just below the badge row, y=100) for the first 4 seconds of that beat only. Font size auto-shrinks (54px down to 32px, max 3 lines) so the card stays <= 420px tall and never reaches the frame middle. Avatar beats do not show a banner. The card uses `backdrop-filter` but is dark enough to read without it.
 - **Badges:** a `THIRD RAIL SPORTS` badge in the top-left on every frame, plus the optional `leagueBadge` in the top-right.
 - **Music:** see `musicUrl` above.
 - A null, empty or missing `photo_url` renders the dark `#0a0a0a` background with a faint centered `TRS` watermark (see Null tolerance above).
