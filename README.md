@@ -135,7 +135,7 @@ smaller chunks. Measured wall-clock and the gate outcome: TBD after the human ru
 ## Testing a render directly on Lambda
 
 ```
-node --env-file=.env scripts/test-render.mjs [short|full|g4|g4b]
+node --env-file=.env scripts/test-render.mjs [short|full|g4|g4b|g4c]
 ```
 
 Renders the real `BeatSequence` composition straight on Lambda, bypassing the Vercel API.
@@ -146,6 +146,13 @@ exercises the stat beat and both wipe transitions. `g4b` is the G4b premium-pass
 shape: 7 beats / 51s / 1530 frames (broll with an ~80-char banner, avatar, broll, stat `27.4 PPG`, broll, stat
 `$1,234.5M`, avatar) using `framesPerLambda = max(20, ceil(frames/24))` (64 -> 25 invocations, under the 40 quota);
 it shows lime wipes, both slide-push impact cuts into stats and the last beat, the glass banner and the odometer.
+`g4c` is the G4c camera + grade proof: 8 beats / 33s / 990 frames (avatar, broll, broll, stat `27.4 PPG`, broll,
+stat `$1,234.5M`, broll, avatar) sized so `assignCameraMoves` walks the full 6-move pool with no immediate
+repeat (`zoomOut, panUp, panRight, panUp, panDown, panRight, panLeft, zoomIn`) and exercises both cut styles
+(4 lime wipes, 3 impact cuts into the two stat beats and the last beat) with the permanent G3 grade applied
+throughout; see [Camera movement and colour grade (G4c)](#camera-movement-and-colour-grade-g4c) below. It
+reuses the single real placeholder photo on every beat (the repo has no second one to diversify with) and
+uses `framesPerLambda = max(20, ceil(frames/24))` (42 -> 25 invocations), aborting if that would exceed 30.
 Never run two renders at once. Prints the final output URL on success or `progress.errors` on failure.
 
 ## Stat beat and transitions (G4)
@@ -168,15 +175,43 @@ cut frame is fully lime). Pass `transitions: false` to disable both styles.
 brand badges (`backdrop-filter` blur, base alpha 0.74, lime accent bar) that slides in, holds and exits.
 Verified on real Lambda that the backdrop blur renders and the text stays readable.
 
-**Current site:** `trs-remotion-g4b-4e92486` (see `deploy-manifest.json`; composition code at commit
-`4e92486`). The live API keeps rendering the previous site (`trs-remotion-g4-8df37ac`) until the human
-updates `REMOTION_SERVE_URL`:
+**Deployed site (not yet live):** `trs-remotion-g4c-1e60934` (see `deploy-manifest.json`; composition
+code at commit `1e60934`, which contains the deterministic camera-movement pool, the permanent G3 grade
+and the `g4c` proof mode). The live API keeps rendering the **previous** site (`trs-remotion-g4b-4e92486`)
+until a HUMAN runs:
 
 ```
 npx vercel env rm REMOTION_SERVE_URL production
 npx vercel env add REMOTION_SERVE_URL production
 npx vercel --prod
 ```
+
+(paste the new `serveUrl` from `deploy-manifest.json` when prompted by `env add`).
+
+## Camera movement and colour grade (G4c)
+
+**Camera movement.** Every beat with a photo background (`broll`, `stat`, and the `avatar` beat's
+background photo -- never the avatar's own corner video clip) gets one of 6 deterministic camera moves
+from `CAMERA_MOVES` (`src/lib/camera.ts`): `zoomIn`, `zoomOut`, `panLeft`, `panRight`, `panUp`, `panDown`.
+`assignCameraMoves` picks one move per beat, seeded only by that beat's position in the `beats` array (a
+small seeded PRNG, `mulberry32` -- no `Math.random()`, no wall-clock, so the same beats array always
+produces the same movie, keeping Remotion renders frame-pure and reproducible) and never repeats the same
+move on two consecutive beats. Pans use a fixed 1.12x scale so the visible window never exceeds the source
+image bounds at any frame (no empty edges at full pan extent). This is additive: it does not change the
+beat/props contract, total duration, or `transitions` behaviour.
+
+**Colour grade.** Every photo background and the avatar's corner video clip are wrapped in `PhotoGrade`
+(`src/compositions/PhotoGrade.tsx`), which permanently applies **G3 "Third Rail Green-Black"**
+(`src/lib/grade.ts`) -- an SVG `feColorMatrix` saturate + per-channel tone-curve filter, plus a radial
+vignette on full-bleed photo backgrounds only (the avatar's small corner clip gets the tone curve without
+the vignette, which would read as an odd dark smudge at that size). **This is a fixed brand decision, not
+a per-render option** -- there is no grade-selection prop, and production code does not import from
+`src/bakeoff/` (the grade's prototype home). The grade wraps *only* the photographic layer: captions, the
+glass banner, brand badges, the wipe/impact cut layers and the stat card are all rendered as siblings
+outside `PhotoGrade` and stay pixel-identical to an ungraded render (proven by two independent pixel diffs
+in the G3 port; re-confirmed visually on real Lambda output for `g4c`, including in the same frames as an
+active lime wipe -- the badge's own translucent backing shows the wipe color through it, which is pre-existing
+alpha blending, not the grade shifting the badge's own pixel colour).
 
 ## Environment variables
 
