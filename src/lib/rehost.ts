@@ -31,6 +31,55 @@ export function allowedImageType(contentType: string | null | undefined): string
 
 export const extForContentType = (mime: string): string | null => EXT_BY_TYPE[mime] ?? null;
 
+/**
+ * Identifies an image type from its real byte signature, ignoring any declared Content-Type.
+ * A real-world host (confirmed: Telegram's file server) can serve a genuine image under a
+ * generic/missing Content-Type (e.g. application/octet-stream) -- trusting the header alone then
+ * wrongly rejects a real photo. Same "sniff real bytes, don't trust a declared type" fix already
+ * applied once in this project for the identical class of bug (13a's Build Vision Request).
+ */
+export function sniffImageType(bytes: Uint8Array): string | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38 &&
+    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
+    bytes[5] === 0x61
+  ) {
+    return 'image/gif';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
+
 export const withinSizeCap = (bytes: number): boolean => bytes > 0 && bytes <= MAX_PHOTO_BYTES;
 
 export const objectKey = (renderId: string, position: number, ext: string): string =>
@@ -264,13 +313,10 @@ async function rehostOne(
       await res.body?.cancel().catch(() => {});
       return fail(res.status);
     }
-    const type = allowedImageType(res.headers.get('content-type'));
-    if (!type) {
-      await res.body?.cancel().catch(() => {});
-      return fail('unsupported_content_type');
-    }
+    const headerType = allowedImageType(res.headers.get('content-type'));
     bytes = await readCapped(res);
-    mime = type;
+    mime = headerType ?? sniffImageType(bytes) ?? '';
+    if (!mime) return fail('unsupported_content_type');
   } catch (err) {
     if (err instanceof RehostFailure) return fail(err.reason);
     const name = err instanceof Error ? err.name : '';

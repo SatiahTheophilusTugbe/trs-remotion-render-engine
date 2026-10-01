@@ -11,6 +11,7 @@ import {
   REHOST_REGION,
   FETCH_TIMEOUT_MS,
   allowedImageType,
+  sniffImageType,
   extForContentType,
   publicUrl,
   readCapped,
@@ -112,15 +113,15 @@ export async function POST(request: Request): Promise<Response> {
       await res.body?.cancel().catch(() => {});
       return Response.json({ error: 'telegram_error', details: [`http_${res.status}`] }, { status: 502 });
     }
-    const type = allowedImageType(res.headers.get('content-type'));
+    const headerType = allowedImageType(res.headers.get('content-type'));
+    bytes = await readCapped(res);
+    const type = headerType ?? sniffImageType(bytes);
     if (!type) {
-      await res.body?.cancel().catch(() => {});
       return Response.json(
         { error: 'invalid input', details: ['unsupported_content_type'] },
         { status: 422 },
       );
     }
-    bytes = await readCapped(res);
     mime = type;
   } catch (err) {
     if (err instanceof RehostFailure) {

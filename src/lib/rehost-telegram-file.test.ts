@@ -165,6 +165,24 @@ describe('POST /api/rehost-telegram-file', () => {
     expect((await res.json()).details).toEqual(['unsupported_content_type']);
   });
 
+  it('still succeeds when Telegram serves a real photo under a generic content-type (real-world quirk)', async () => {
+    // Real magic bytes for a JPEG, served under a non-image Content-Type -- exactly what a real
+    // Telegram Upload-Own test hit: the header alone said the file wasn't an image; the bytes prove it is.
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0]);
+    mockFetch.mockImplementation(async (url: string) =>
+      url.includes('/getFile')
+        ? telegramOk()
+        : new Response(jpegBytes, { headers: { 'content-type': 'application/octet-stream' } }),
+    );
+    const res = await POST(req({ file_id: 'f1' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.url).toMatch(/assets\/telegram\/.*\.jpg$/);
+    expect(mockS3Send).toHaveBeenCalledTimes(1);
+    const put = mockS3Send.mock.calls[0][0].input;
+    expect(put.ContentType).toBe('image/jpeg');
+  });
+
   it('422 upload_failed when S3 put rejects', async () => {
     mockS3Send.mockRejectedValue(new Error('AccessDenied'));
     const res = await POST(req({ file_id: 'f1' }));
