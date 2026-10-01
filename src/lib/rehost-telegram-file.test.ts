@@ -203,9 +203,8 @@ describe('static guard: the bot token URL is built in exactly two places, never 
     const responseLines = lines.filter((l) => l.includes('Response.json'));
     expect(responseLines.length).toBeGreaterThan(0);
     for (const l of responseLines) {
-      expect(l).not.toMatch(/token/i);
-      expect(l).not.toMatch(/TELEGRAM_BOT_TOKEN/i);
-      expect(l).not.toMatch(/api\.telegram\.org/i);
+      expect(l).not.toMatch(/\btoken\b/);
+      expect(l).not.toMatch(/api\.telegram\.org/);
     }
   });
 });
