@@ -3,6 +3,9 @@
   "functions": {
     "api/submit-render.ts": {
       "maxDuration": 60
+    },
+    "api/rehost-telegram-file.ts": {
+      "maxDuration": 60
     }
   }
 }

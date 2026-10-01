@@ -63,8 +63,10 @@ export type ResolveFn = (hostname: string) => Promise<string[]>;
 
 type FetchOutcome = { ok: true; url: string } | { ok: false; error: string };
 
-/** Thrown internally to carry a short, URL-free failure reason. */
-class RehostFailure extends Error {
+/** Thrown internally to carry a short, URL-free failure reason. Exported so other server-side
+ *  fetch-and-cap call sites (e.g. api/rehost-telegram-file.ts) can reuse readCapped's error shape
+ *  without duplicating the streaming-cap logic. */
+export class RehostFailure extends Error {
   readonly reason: string | number;
   constructor(reason: string | number) {
     super(String(reason));
@@ -206,8 +208,10 @@ async function guardedFetch(
   }
 }
 
-/** Reads the body, aborting as soon as the cap is exceeded (a missing/lying content-length cannot bypass it). */
-async function readCapped(res: Response): Promise<Uint8Array> {
+/** Reads the body, aborting as soon as the cap is exceeded (a missing/lying content-length cannot bypass it).
+ *  Exported for reuse by other endpoints that need the same streaming size cap against MAX_PHOTO_BYTES
+ *  without an SSRF guard (e.g. a fixed, trusted host like api.telegram.org). */
+export async function readCapped(res: Response): Promise<Uint8Array> {
   const header = res.headers.get('content-length');
   if (header !== null && Number(header) > MAX_PHOTO_BYTES) {
     await res.body?.cancel().catch(() => {});
