@@ -1,17 +1,19 @@
+import { useId } from 'react';
 import { AbsoluteFill, Img } from 'remotion';
-import type { CameraFrame } from '../lib/camera';
+import type { ShotFrame } from '../lib/shotMotion';
 import { PhotoGrade } from './PhotoGrade';
 
 export const BeatBackground: React.FC<{
   photoUrl: string | null | undefined;
   objectPosition: string;
-  camera?: CameraFrame;
+  shot?: ShotFrame;
   /**
-   * @deprecated Superseded by `camera`. Retained only so the src/bakeoff/ prototype
+   * @deprecated Superseded by `shot`. Retained only so the src/bakeoff/ prototype
    * tooling (out of scope for this task) keeps compiling/rendering unchanged.
    */
   scale?: number;
-}> = ({ photoUrl, objectPosition, camera, scale }) => {
+}> = ({ photoUrl, objectPosition, shot, scale }) => {
+  const filterId = 'shot-blur-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
   if (!photoUrl) {
     return (
       <AbsoluteFill
@@ -36,8 +38,16 @@ export const BeatBackground: React.FC<{
       </AbsoluteFill>
     );
   }
+  const blurred = !!shot && (shot.blurX > 0.4 || shot.blurY > 0.4);
   return (
     <PhotoGrade>
+      {blurred ? (
+        <svg width={0} height={0} style={{ position: 'absolute' }}>
+          <filter id={filterId} x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation={`${(shot?.blurX ?? 0).toFixed(2)} ${(shot?.blurY ?? 0).toFixed(2)}`} />
+          </filter>
+        </svg>
+      ) : null}
       <Img
         src={photoUrl}
         style={{
@@ -48,8 +58,9 @@ export const BeatBackground: React.FC<{
           height: '100%',
           objectFit: 'cover',
           objectPosition,
-          transform: camera
-            ? `translate(${camera.translateXPct}%, ${camera.translateYPct}%) scale(${camera.scale})`
+          filter: blurred ? `url(#${filterId})` : undefined,
+          transform: shot
+            ? `translate(${shot.txPct.toFixed(3)}%, ${shot.tyPct.toFixed(3)}%) scale(${shot.scale.toFixed(4)})`
             : scale !== undefined
               ? `scale(${scale})`
               : undefined,

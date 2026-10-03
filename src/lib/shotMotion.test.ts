@@ -10,20 +10,22 @@ const plan = (d: number, o: Partial<PlanOptions> = {}) =>
 describe('shotFrameAt edge safety', () => {
   const focals: (Focal | null)[] = [null, { x: 0, y: 0 }, { x: 1, y: 1 }, { x: 0.5, y: 0.5 }, { x: 0.8, y: 0.2 }];
   it('never exposes an edge on any frame', () => {
+    const violations: string[] = [];
     for (const focal of focals) {
       for (let seed = 0; seed <= 5; seed++) {
         for (const d of [30, 282, 420]) {
           const shots = plan(d, { focal, seed });
           for (let f = 0; f < d; f++) {
             const s = shotFrameAt(shots, f, focal);
-            expect(s.scale).toBeGreaterThanOrEqual(1);
             const limit = (s.scale - 1) * 50 + 1e-9;
-            expect(Math.abs(s.txPct)).toBeLessThanOrEqual(limit);
-            expect(Math.abs(s.tyPct)).toBeLessThanOrEqual(limit);
+            if (s.scale < 1 || Math.abs(s.txPct) > limit || Math.abs(s.tyPct) > limit) {
+              violations.push(JSON.stringify({ focal, seed, d, f, s }));
+            }
           }
         }
       }
     }
+    expect(violations).toEqual([]);
   });
 });
 

@@ -1,26 +1,19 @@
-import { AbsoluteFill, OffthreadVideo, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, OffthreadVideo } from 'remotion';
 import type { AvatarBeatData } from '../types/beat';
 import { BeatBackground } from './BeatBackground';
 import { PhotoGrade } from './PhotoGrade';
-import { cameraFrameAt, type CameraMoveName } from '../lib/camera';
-import { framesForBeat } from '../lib/duration';
+import { useShotFrame, type ShotMotionOptions } from './useShotFrame';
 
 export const AvatarBeat: React.FC<{
   beat: AvatarBeatData;
-  /**
-   * Defaults to 'zoomIn' so src/bakeoff/ prototypes that render this component directly
-   * (out of scope for this task) keep working without threading a camera assignment through.
-   */
-  cameraMove?: CameraMoveName;
-}> = ({ beat, cameraMove = 'zoomIn' }) => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const durationInFrames = framesForBeat(beat, fps);
-  const camera = cameraFrameAt(cameraMove, frame, durationInFrames);
+  /** Shot-engine options from BeatSequence; bakeoff tooling falls back to DEFAULT_SHOT_MOTION. */
+  motion?: ShotMotionOptions;
+}> = ({ beat, motion }) => {
+  const { shot, objectPosition } = useShotFrame(beat, motion);
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
-      <BeatBackground photoUrl={beat.photo_url} objectPosition="center top" camera={camera} />
+      <BeatBackground photoUrl={beat.photo_url} objectPosition={objectPosition} shot={shot} />
       <div
         style={{
           position: 'absolute',

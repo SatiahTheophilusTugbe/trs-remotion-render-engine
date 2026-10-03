@@ -150,7 +150,7 @@ it shows lime wipes, both slide-push impact cuts into stats and the last beat, t
 stat `$1,234.5M`, broll, avatar) sized so `assignCameraMoves` walks the full 6-move pool with no immediate
 repeat (`zoomOut, panUp, panRight, panUp, panDown, panRight, panLeft, zoomIn`) and exercises both cut styles
 (4 lime wipes, 3 impact cuts into the two stat beats and the last beat) with the permanent G3 grade applied
-throughout; see [Camera movement and colour grade (G4c)](#camera-movement-and-colour-grade-g4c) below. It
+throughout; see [Camera movement and colour grade (G4c)](#photo-shot-engine-and-colour-grade) below. It
 reuses the single real placeholder photo on every beat (the repo has no second one to diversify with) and
 uses `framesPerLambda = max(20, ceil(frames/24))` (42 -> 25 invocations), aborting if that would exceed 30.
 Never run two renders at once. Prints the final output URL on success or `progress.errors` on failure.
@@ -188,17 +188,23 @@ npx vercel --prod
 
 (paste the new `serveUrl` from `deploy-manifest.json` when prompted by `env add`).
 
-## Camera movement and colour grade (G4c)
+## Photo shot engine and colour grade
 
-**Camera movement.** Every beat with a photo background (`broll`, `stat`, and the `avatar` beat's
-background photo -- never the avatar's own corner video clip) gets one of 6 deterministic camera moves
-from `CAMERA_MOVES` (`src/lib/camera.ts`): `zoomIn`, `zoomOut`, `panLeft`, `panRight`, `panUp`, `panDown`.
-`assignCameraMoves` picks one move per beat, seeded only by that beat's position in the `beats` array (a
-small seeded PRNG, `mulberry32` -- no `Math.random()`, no wall-clock, so the same beats array always
-produces the same movie, keeping Remotion renders frame-pure and reproducible) and never repeats the same
-move on two consecutive beats. Pans use a fixed 1.12x scale so the visible window never exceeds the source
-image bounds at any frame (no empty edges at full pan extent). This is additive: it does not change the
-beat/props contract, total duration, or `transitions` behaviour.
+**Photo shot engine** (replaced the G4c camera pool, 2026-10-03). Every photo background (`broll`,
+`stat`, and the `avatar` beat's background -- never the avatar's corner clip) is cut into shots by
+`planShots` (`src/lib/shots.ts`) and animated per frame by `shotFrameAt` (`src/lib/shotMotion.ts`):
+
+- **Focal rule.** A beat may carry `focal: { x, y }` (0-1, image-relative, from upstream Claude Vision).
+  With focal: 3-4 shots of ~3s cycling wide 1.04x -> tight 1.35x -> mid 1.18x -> tight, each centred on
+  the focal point (`object-position` = focal, so the subject is always on screen). **Without focal: one
+  full-frame shot, the image as-is** -- no crop changes. Invalid focal is dropped with a warning.
+- **Vocabulary.** Slam on entry (oversized snap with overshoot, vertical blur, micro-shake); inner cuts
+  alternate hard-cut + micro-punch and whip (horizontal blur smear), start picked by a seeded PRNG per
+  beat; ~3% fast-settling push while holding (no slow drift); whisk on exit (zoom-through + blur).
+- **Hand-offs.** Beats entering via the slide-shake impact cut skip the slam; beats exiting via it, and
+  the final beat, skip the whisk. Lime wipe and slide-shake are unchanged.
+- **Safety.** Every frame keeps `scale >= 1` and `|translate| <= (scale - 1) * 50%` (unit-tested over
+  every frame), so no empty edge ever shows. All timing/strength constants live in `shotMotion.ts`.
 
 **Colour grade.** Every photo background and the avatar's corner video clip are wrapped in `PhotoGrade`
 (`src/compositions/PhotoGrade.tsx`), which permanently applies **G3 "Third Rail Green-Black"**
