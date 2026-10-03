@@ -65,7 +65,11 @@ export const BeatSequence: React.FC<{
                   {renderBeat(beat, fps, motion)}
                   {beat.type === 'broll' && beat.overlay_text ? <GlassBanner text={beat.overlay_text} /> : null}
                   {beat.photo_credit ? (
-                    <PhotoCredit credit={beat.photo_credit} variant={beat.type === 'avatar' ? 'avatar' : 'broll'} />
+                    <PhotoCredit
+                      credit={beat.photo_credit}
+                      variant={beat.type === 'avatar' ? 'avatar' : 'broll'}
+                      durationInFrames={durationInFrames}
+                    />
                   ) : null}
                   {(() => {
                     const words = parseWordTimings(beat.word_timings);
