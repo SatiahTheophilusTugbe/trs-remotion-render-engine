@@ -30,18 +30,17 @@ export const PhotoCredit: React.FC<{ credit: string; variant: 'avatar' | 'broll'
           margin: 0,
           transform: `translateX(${(1 - p) * OFFSCREEN_X}px)`,
           opacity: p,
-          // Always legible whatever the photo (owner): a dark pill guarantees >= 5.8:1 contrast for
-          // the white text even over a pure-white image; lime edge = brand accent (#CCFF00).
-          padding: '8px 16px 8px 14px',
+          // Styled like the THIRD RAIL SPORTS badge (owner): TRS lime text on a dark pill, legible on any
+          // photo - even over pure white the pill keeps the lime text above 9:1 contrast.
+          padding: '8px 16px',
           background: 'rgba(0,0,0,0.6)',
-          borderLeft: '4px solid #CCFF00',
           borderRadius: 6,
           boxSizing: 'border-box',
           fontFamily: montserratBold,
           fontSize: 24,
           fontWeight: 700,
           letterSpacing: '0.5px',
-          color: '#FFFFFF',
+          color: '#AAFF00', // same lime as BrandBadges
           textShadow: '0 1px 4px rgba(0,0,0,0.9)',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
