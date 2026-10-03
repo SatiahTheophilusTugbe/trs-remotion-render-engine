@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   allowedImageType, sniffImageType, extForContentType, withinSizeCap, objectKey, publicUrl, hostOf,
-  formatPhotoError, rehostPhotos, MAX_PHOTO_BYTES, BROWSER_USER_AGENT, REHOST_BUCKET,
+  formatPhotoError, rehostPhotos, MAX_PHOTO_BYTES, BROWSER_USER_AGENT, REHOST_BUCKET, type RehostBeat,
 } from './rehost';
 
 const pub = async () => ['93.184.216.34'];
@@ -97,8 +97,9 @@ describe('rehostPhotos', () => {
     const r = await rehostPhotos(beats.slice(0, 2), 'rid', { fetchFn, put: vi.fn().mockResolvedValue(undefined), resolve: pub, concurrency: 1 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect([r.beats[0].photo_w, r.beats[0].photo_h]).toEqual([1200, 800]);
-    expect(r.beats[1].photo_w).toBeUndefined();
+    const [b0, b1] = r.beats as RehostBeat[];
+    expect([b0.photo_w, b0.photo_h]).toEqual([1200, 800]);
+    expect(b1.photo_w).toBeUndefined();
   });
 
   it('carries a beat focal point through rehosting unchanged', async () => {

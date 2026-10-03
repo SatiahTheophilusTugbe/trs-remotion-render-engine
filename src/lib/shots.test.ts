@@ -1,21 +1,100 @@
 import { describe, it, expect } from 'vitest';
 import {
   FRAMING_CYCLE,
+  HOLD_MOVES,
   MID_SCALE,
+  MIN_CROP_SCALE,
+  MOVE_SCALE,
+  MOVE_SHIFT,
+  SUBJECT_MARGIN,
   TIGHT_SCALE,
   WIDE_SCALE,
   focalObjectPosition,
   planShots,
+  safeCropScale,
   shotCount,
+  visibleFraction,
   type PlanOptions,
 } from './shots';
+import type { Focal } from '../types/beat';
 
 const FPS = 30;
-const focal = { x: 0.5, y: 0.4 };
-const opts = (o: Partial<PlanOptions> = {}): PlanOptions => ({ focal, seed: 0, slamIn: true, whiskOut: true, ...o });
+const LANDSCAPE = 3 / 2;
+// A head-and-shoulders box in a typical 3:2 news photo.
+const person: Focal = { x: 0.5, y: 0.4, w: 0.15, h: 0.25 };
+// A team line-up / group celebration: the box spans most of the photo.
+const lineup: Focal = { x: 0.5, y: 0.5, w: 0.9, h: 0.6 };
+const opts = (o: Partial<PlanOptions> = {}): PlanOptions => ({
+  focal: person,
+  aspect: LANDSCAPE,
+  seed: 0,
+  slamIn: true,
+  whiskOut: true,
+  ...o,
+});
+
+// Frame-space span of the box at zoom s with the same centring the renderer uses.
+const span = (c: number, half: number, s: number) => {
+  const t = Math.max(-(s - 1) / 2, Math.min((s - 1) / 2, -s * (c - 0.5)));
+  return [0.5 + t + s * (c - half - 0.5), 0.5 + t + s * (c + half - 0.5)];
+};
+
+describe('visibleFraction', () => {
+  it('a landscape photo shows a narrow vertical strip; a tall photo a horizontal band', () => {
+    expect(visibleFraction(1.5).vw).toBeCloseTo(0.375);
+    expect(visibleFraction(1.5).vh).toBe(1);
+    expect(visibleFraction(0.5).vw).toBe(1);
+    expect(visibleFraction(0.5).vh).toBeCloseTo(0.5 / (1080 / 1920));
+  });
+});
+
+describe('safeCropScale', () => {
+  it('crops a single person to the full tight scale when the box allows', () => {
+    expect(safeCropScale(person, LANDSCAPE)).toBe(TIGHT_SCALE);
+  });
+
+  it('never crops a line-up or group shot', () => {
+    expect(safeCropScale(lineup, LANDSCAPE)).toBeNull();
+  });
+
+  it('never crops without a box or without the photo size', () => {
+    expect(safeCropScale({ x: 0.5, y: 0.4 }, LANDSCAPE)).toBeNull();
+    expect(safeCropScale(person, null)).toBeNull();
+    expect(safeCropScale(null, LANDSCAPE)).toBeNull();
+  });
+
+  it('keeps the whole subject inside the frame margins, even near an edge and under a hold move', () => {
+    const cases: Focal[] = [
+      { x: 0.3, y: 0.3, w: 0.12, h: 0.3 },
+      { x: 0.62, y: 0.45, w: 0.1, h: 0.2 },
+      { x: 0.5, y: 0.2, w: 0.2, h: 0.3 },
+      { x: 0.42, y: 0.45, w: 0.18, h: 0.4 },
+    ];
+    for (const f of cases) {
+      const s = safeCropScale(f, LANDSCAPE);
+      if (s === null) continue;
+      const { vw, vh } = visibleFraction(LANDSCAPE);
+      for (const z of [s, s * MOVE_SCALE]) {
+        const [x0, x1] = span(f.x, f.w! / 2 / vw, z);
+        const [y0, y1] = span(f.y, f.h! / 2 / vh, z);
+        const m = SUBJECT_MARGIN + MOVE_SHIFT - 1e-9;
+        expect(x0).toBeGreaterThanOrEqual(m);
+        expect(x1).toBeLessThanOrEqual(1 - m);
+        expect(y0).toBeGreaterThanOrEqual(m);
+        expect(y1).toBeLessThanOrEqual(1 - m);
+      }
+      expect(s).toBeGreaterThanOrEqual(MIN_CROP_SCALE);
+    }
+  });
+
+  it('zooms less for a bigger subject', () => {
+    const big = safeCropScale({ x: 0.5, y: 0.45, w: 0.3, h: 0.45 }, LANDSCAPE);
+    expect(big === null || big < TIGHT_SCALE).toBe(true);
+  });
+});
 
 describe('shotCount', () => {
-  it('is always 1 without a focal point', () => {
+  it('is always 1 when the beat cannot be cropped', () => {
     expect(shotCount(420, FPS, false)).toBe(1);
   });
   it.each([
@@ -26,16 +105,26 @@ describe('shotCount', () => {
     [5, 1],
     [2.5, 1],
     [1, 1],
-  ])('%ss with focal -> %i shots', (sec, n) => {
+  ])('%ss croppable -> %i shots', (sec, n) => {
     expect(shotCount(Math.round(sec * FPS), FPS, true)).toBe(n);
   });
 });
 
 describe('planShots', () => {
-  it('no focal: one full-frame wide shot spanning the beat', () => {
-    expect(planShots(330, FPS, opts({ focal: null }))).toEqual([
-      { from: 0, durationInFrames: 330, scale: WIDE_SCALE, entry: 'slam', whiskOut: true },
-    ]);
+  it('no box: one full-frame wide shot spanning the beat', () => {
+    const shots = planShots(330, FPS, opts({ focal: null }));
+    expect(shots).toHaveLength(1);
+    expect(shots[0]).toMatchObject({ from: 0, durationInFrames: 330, scale: WIDE_SCALE, entry: 'slam', whiskOut: true });
+  });
+
+  it('line-up: one wide shot, never a crop', () => {
+    const shots = planShots(420, FPS, opts({ focal: lineup }));
+    expect(shots.map((s) => s.scale)).toEqual([WIDE_SCALE]);
+  });
+
+  it('single subject: wide then the safe tight crop', () => {
+    expect(FRAMING_CYCLE).toEqual([WIDE_SCALE, TIGHT_SCALE, MID_SCALE]);
+    expect(planShots(420, FPS, opts()).map((s) => s.scale)).toEqual([WIDE_SCALE, TIGHT_SCALE]);
   });
 
   it('shots tile the beat exactly', () => {
@@ -49,14 +138,8 @@ describe('planShots', () => {
     }
   });
 
-  it('frames wide then tight (one cut per beat)', () => {
-    expect(FRAMING_CYCLE).toEqual([WIDE_SCALE, TIGHT_SCALE, MID_SCALE]);
-    expect(MID_SCALE).toBe(1.1);
-    expect(planShots(420, FPS, opts()).map((s) => s.scale)).toEqual([WIDE_SCALE, TIGHT_SCALE]);
-  });
-
   it('first entry is slam only when slamIn', () => {
-    expect(planShots(420, FPS, opts()).map((s) => s.entry)[0]).toBe('slam');
+    expect(planShots(420, FPS, opts())[0].entry).toBe('slam');
     expect(planShots(420, FPS, opts({ slamIn: false }))[0].entry).toBe('none');
   });
 
@@ -69,6 +152,17 @@ describe('planShots', () => {
       seen.add(inner[0]);
     }
     expect(seen.size).toBe(2);
+  });
+
+  it('every shot gets a hold move; consecutive shots differ; beats vary across the whole pool', () => {
+    const seen = new Set<string>();
+    for (let seed = 0; seed <= 20; seed++) {
+      const shots = planShots(420, FPS, opts({ seed }));
+      shots.forEach((s) => expect(HOLD_MOVES).toContain(s.move));
+      for (let i = 1; i < shots.length; i++) expect(shots[i].move).not.toBe(shots[i - 1].move);
+      shots.forEach((s) => seen.add(s.move));
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(3);
   });
 
   it('is deterministic for the same seed', () => {

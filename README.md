@@ -194,10 +194,14 @@ npx vercel --prod
 `stat`, and the `avatar` beat's background -- never the avatar's corner clip) is cut into shots by
 `planShots` (`src/lib/shots.ts`) and animated per frame by `shotFrameAt` (`src/lib/shotMotion.ts`):
 
-- **Focal rule.** A beat may carry `focal: { x, y }` (0-1, image-relative, from upstream Claude Vision).
-  With focal: 2 shots per beat (one cut), wide 1.04x -> tight 1.35x, centred on
-  the focal point (beats under 6s stay a single shot) (`object-position` = focal, so the subject is always on screen). **Without focal: one
-  full-frame shot, the image as-is** -- no crop changes. Invalid focal is dropped with a warning.
+- **Crop rule.** A beat may carry `focal: { x, y, w, h }` (0-1, image-relative subject centre and box, from
+  upstream Claude Vision); rehost measures each photo's pixel size (`photo_w`/`photo_h`). The tight shot
+  uses the largest zoom (max 1.35x) that keeps the WHOLE box on screen, with margin, through the hold move
+  (`safeCropScale`). Line-ups / group shots (box too big) and photos without a box or size stay one wide
+  shot, as-is. Croppable beats of 6s+ get 2 shots (one cut).
+- **Hold moves.** Every shot gets an eased move from a 5-move pool (push-in, pull-out, drift left/right,
+  rise; +8% scale or +/-3% drift), never repeating on consecutive shots.
+- **Poster frame.** The first beat never slams, so frame 0 (the thumbnail) is a sharp, full image.
 - **Vocabulary.** Slam on entry (oversized snap with overshoot, vertical blur, micro-shake); the inner
   cut is a hard-cut + micro-punch or a whip (horizontal blur smear), picked by a seeded PRNG per beat; ~3% fast-settling push while holding (no slow drift); whisk on exit (zoom-through + blur).
 - **Hand-offs.** Beats entering via the slide-shake impact cut skip the slam; beats exiting via it, and

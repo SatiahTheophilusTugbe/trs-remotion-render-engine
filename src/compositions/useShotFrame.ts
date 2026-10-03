@@ -10,7 +10,7 @@ export type ShotMotionOptions = { seed: number; slamIn: boolean; whiskOut: boole
 export const DEFAULT_SHOT_MOTION: ShotMotionOptions = { seed: 0, slamIn: true, whiskOut: false };
 
 export const useShotFrame = (
-  beat: { duration_sec: number; focal?: Focal | null },
+  beat: { duration_sec: number; focal?: Focal | null; photo_w?: number; photo_h?: number },
   motion: ShotMotionOptions = DEFAULT_SHOT_MOTION,
 ): { shot: ShotFrame; objectPosition: string } => {
   const frame = useCurrentFrame();
@@ -18,9 +18,10 @@ export const useShotFrame = (
   const durationInFrames = framesForBeat(beat, fps);
   const { seed, slamIn, whiskOut } = motion;
   const focal = beat.focal ?? null;
+  const aspect = beat.photo_w && beat.photo_h ? beat.photo_w / beat.photo_h : null;
   const shots = useMemo(
-    () => planShots(durationInFrames, fps, { focal, seed, slamIn, whiskOut }),
-    [durationInFrames, fps, focal, seed, slamIn, whiskOut],
+    () => planShots(durationInFrames, fps, { focal, aspect, seed, slamIn, whiskOut }),
+    [durationInFrames, fps, focal, aspect, seed, slamIn, whiskOut],
   );
   return { shot: shotFrameAt(shots, frame, focal), objectPosition: focalObjectPosition(focal) };
 };

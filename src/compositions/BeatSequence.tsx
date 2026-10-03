@@ -43,11 +43,12 @@ export const BeatSequence: React.FC<{
       {beats.map((beat, index) => {
         const { from, durationInFrames } = slots[index];
         // Slide-shake cuts move the whole frame themselves: no slam into them, no whisk out of
-        // them, and the final beat never whisks into black.
+        // them, and the final beat never whisks into black. The first beat never slams either:
+        // frame 0 is the video's poster/thumbnail and must be a sharp, full image (owner, 2026-10-03).
         const cutsOn = transitions !== false;
         const motion: ShotMotionOptions = {
           seed: index,
-          slamIn: !(cutsOn && cutStyleFor(beats, index) === 'slideShake'),
+          slamIn: index > 0 && !(cutsOn && cutStyleFor(beats, index) === 'slideShake'),
           whiskOut: index < beats.length - 1 && !(cutsOn && cutStyleFor(beats, index + 1) === 'slideShake'),
         };
         return (
