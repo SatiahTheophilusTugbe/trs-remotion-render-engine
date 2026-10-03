@@ -11,6 +11,7 @@ import {
   TIGHT_SCALE,
   WIDE_SCALE,
   focalObjectPosition,
+  photoLayout,
   planShots,
   safeCropScale,
   shotCount,
@@ -202,5 +203,24 @@ describe('focalObjectPosition', () => {
   it('falls back to the existing centre-top framing', () => {
     expect(focalObjectPosition(null)).toBe('center top');
     expect(focalObjectPosition(undefined)).toBe('center top');
+  });
+});
+
+describe('photoLayout', () => {
+  it('letterboxes a landscape group photo whose box is wider than the visible strip', () => {
+    expect(photoLayout(lineup, LANDSCAPE)).toBe('letterbox');
+  });
+  it('keeps full-bleed cover for a single person, no box, unknown size, or a portrait photo', () => {
+    expect(photoLayout(person, LANDSCAPE)).toBe('cover');
+    expect(photoLayout(null, LANDSCAPE)).toBe('cover');
+    expect(photoLayout({ x: 0.5, y: 0.5 }, LANDSCAPE)).toBe('cover');
+    expect(photoLayout(lineup, null)).toBe('cover');
+    expect(photoLayout(lineup, 0.5)).toBe('cover');
+  });
+  it('a medium subject that fits the strip uncropped stays cover', () => {
+    expect(photoLayout({ x: 0.5, y: 0.45, w: 0.22, h: 0.6 }, LANDSCAPE)).toBe('cover');
+  });
+  it('a letterboxed photo is always a single shot', () => {
+    expect(planShots(420, FPS, opts({ focal: lineup }))).toHaveLength(1);
   });
 });

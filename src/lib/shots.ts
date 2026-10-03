@@ -86,6 +86,20 @@ export const safeCropScale = (focal: Focal | null | undefined, aspect: number | 
   return null;
 };
 
+export type PhotoLayout = 'cover' | 'letterbox';
+
+/**
+ * Group photos (owner, 2026-10-03): when a landscape photo's padded subject box is wider than the strip
+ * a 9:16 frame can show, no safe crop exists and full-bleed would cut the group off at the sides -- show
+ * the WHOLE photo instead (letterboxed over a blurred copy). Everything else stays full-bleed cover.
+ */
+export const photoLayout = (focal: Focal | null | undefined, aspect: number | null | undefined): PhotoLayout => {
+  if (!focal || focal.w === undefined || focal.h === undefined || !aspect || !(aspect > FRAME_ASPECT)) return 'cover';
+  if (safeCropScale(focal, aspect) !== null) return 'cover';
+  const { vw } = visibleFraction(aspect);
+  return (focal.w * BOX_PAD) / vw > 1 - 2 * SUBJECT_MARGIN ? 'letterbox' : 'cover';
+};
+
 export const shotCount = (durationInFrames: number, fps: number, canCrop: boolean): number => {
   if (!canCrop) return 1;
   const sec = durationInFrames / fps;

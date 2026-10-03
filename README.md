@@ -201,6 +201,9 @@ npx vercel --prod
   shot, as-is. Croppable beats of 6s+ get 2 shots (one cut).
 - **Hold moves.** Every shot gets an eased move from a 5-move pool (push-in, pull-out, drift left/right,
   rise; +8% scale or +/-3% drift), never repeating on consecutive shots.
+- **Group photos.** A landscape photo whose (padded) subject box is wider than the 9:16 strip -- line-ups,
+  group celebrations -- is shown WHOLE: fit to frame width over a still, blurred, darkened copy (`photoLayout`,
+  layout `letterbox`), one shot, with the hold move damped so it never cuts the group.
 - **Poster frame.** The first beat never slams, so frame 0 (the thumbnail) is a sharp, full image.
 - **Vocabulary.** Slam on entry (oversized snap with overshoot, vertical blur, micro-shake); the inner
   cut is a hard-cut + micro-punch or a whip (horizontal blur smear), picked by a seeded PRNG per beat; ~3% fast-settling push while holding (no slow drift); whisk on exit (zoom-through + blur).
