@@ -19,10 +19,11 @@ describe('shotCount', () => {
     expect(shotCount(420, FPS, false)).toBe(1);
   });
   it.each([
-    [10.9, 4],
-    [9.4, 3],
-    [14, 4],
-    [5, 2],
+    [10.9, 2],
+    [9.4, 2],
+    [14, 2],
+    [6, 2],
+    [5, 1],
     [2.5, 1],
     [1, 1],
   ])('%ss with focal -> %i shots', (sec, n) => {
@@ -48,9 +49,10 @@ describe('planShots', () => {
     }
   });
 
-  it('framing cycles wide -> tight -> mid -> tight', () => {
-    expect(FRAMING_CYCLE).toEqual([WIDE_SCALE, TIGHT_SCALE, MID_SCALE, TIGHT_SCALE]);
-    expect(planShots(420, FPS, opts()).map((s) => s.scale)).toEqual(FRAMING_CYCLE);
+  it('frames wide then tight (one cut per beat)', () => {
+    expect(FRAMING_CYCLE).toEqual([WIDE_SCALE, TIGHT_SCALE, MID_SCALE]);
+    expect(MID_SCALE).toBe(1.1);
+    expect(planShots(420, FPS, opts()).map((s) => s.scale)).toEqual([WIDE_SCALE, TIGHT_SCALE]);
   });
 
   it('first entry is slam only when slamIn', () => {
@@ -58,17 +60,15 @@ describe('planShots', () => {
     expect(planShots(420, FPS, opts({ slamIn: false }))[0].entry).toBe('none');
   });
 
-  it('inner entries alternate hardPunch / whip, and seeds vary the starting choice', () => {
-    const starts = new Set<string>();
+  it('the inner cut is hardPunch or whip, varying by seed', () => {
+    const seen = new Set<string>();
     for (let seed = 0; seed <= 10; seed++) {
       const inner = planShots(420, FPS, opts({ seed })).slice(1).map((s) => s.entry);
-      expect(inner).toHaveLength(3);
-      expect(inner[0]).not.toBe(inner[1]);
-      expect(inner[2]).toBe(inner[0]);
-      inner.forEach((e) => expect(['hardPunch', 'whip']).toContain(e));
-      starts.add(inner[0]);
+      expect(inner).toHaveLength(1);
+      expect(['hardPunch', 'whip']).toContain(inner[0]);
+      seen.add(inner[0]);
     }
-    expect(starts.size).toBe(2);
+    expect(seen.size).toBe(2);
   });
 
   it('is deterministic for the same seed', () => {
@@ -76,7 +76,7 @@ describe('planShots', () => {
   });
 
   it('whiskOut only on the last shot and only when requested', () => {
-    expect(planShots(420, FPS, opts()).map((s) => s.whiskOut)).toEqual([false, false, false, true]);
+    expect(planShots(420, FPS, opts()).map((s) => s.whiskOut)).toEqual([false, true]);
     expect(planShots(420, FPS, opts({ whiskOut: false })).some((s) => s.whiskOut)).toBe(false);
   });
 

@@ -195,12 +195,11 @@ npx vercel --prod
 `planShots` (`src/lib/shots.ts`) and animated per frame by `shotFrameAt` (`src/lib/shotMotion.ts`):
 
 - **Focal rule.** A beat may carry `focal: { x, y }` (0-1, image-relative, from upstream Claude Vision).
-  With focal: 3-4 shots of ~3s cycling wide 1.04x -> tight 1.35x -> mid 1.18x -> tight, each centred on
-  the focal point (`object-position` = focal, so the subject is always on screen). **Without focal: one
+  With focal: 2 shots per beat (one cut), wide 1.04x -> tight 1.35x, centred on
+  the focal point (beats under 6s stay a single shot) (`object-position` = focal, so the subject is always on screen). **Without focal: one
   full-frame shot, the image as-is** -- no crop changes. Invalid focal is dropped with a warning.
-- **Vocabulary.** Slam on entry (oversized snap with overshoot, vertical blur, micro-shake); inner cuts
-  alternate hard-cut + micro-punch and whip (horizontal blur smear), start picked by a seeded PRNG per
-  beat; ~3% fast-settling push while holding (no slow drift); whisk on exit (zoom-through + blur).
+- **Vocabulary.** Slam on entry (oversized snap with overshoot, vertical blur, micro-shake); the inner
+  cut is a hard-cut + micro-punch or a whip (horizontal blur smear), picked by a seeded PRNG per beat; ~3% fast-settling push while holding (no slow drift); whisk on exit (zoom-through + blur).
 - **Hand-offs.** Beats entering via the slide-shake impact cut skip the slam; beats exiting via it, and
   the final beat, skip the whisk. Lime wipe and slide-shake are unchanged.
 - **Safety.** Every frame keeps `scale >= 1` and `|translate| <= (scale - 1) * 50%` (unit-tested over

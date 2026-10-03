@@ -9,12 +9,12 @@ export type Shot = { from: number; durationInFrames: number; scale: number; entr
 export type PlanOptions = { focal?: Focal | null; seed: number; slamIn: boolean; whiskOut: boolean };
 
 export const WIDE_SCALE = 1.04; // not 1.0: leaves overscan for the slam overshoot and micro-shake
-export const MID_SCALE = 1.18;
+export const MID_SCALE = 1.1; // reserved for the 2-photos-per-beat phase
 export const TIGHT_SCALE = 1.35; // cap: sources are ~1200px wide, already ~2.4x upscaled to fill 1080x1920
-export const FRAMING_CYCLE = [WIDE_SCALE, TIGHT_SCALE, MID_SCALE, TIGHT_SCALE];
-const TARGET_SHOT_SEC = 3;
-const MIN_SHOT_SEC = 2;
-const MAX_SHOTS = 4;
+export const FRAMING_CYCLE = [WIDE_SCALE, TIGHT_SCALE, MID_SCALE];
+// Owner review 2026-10-03: 3-4 cuts per beat felt too fast; one cut per beat (wide -> tight) felt right.
+const MIN_SHOT_SEC = 3;
+const MAX_SHOTS = 2;
 
 const mulberry32 = (seed: number): number => {
   let t = (seed += 0x6d2b79f5);
@@ -26,7 +26,7 @@ const mulberry32 = (seed: number): number => {
 export const shotCount = (durationInFrames: number, fps: number, hasFocal: boolean): number => {
   if (!hasFocal) return 1;
   const sec = durationInFrames / fps;
-  return Math.max(1, Math.min(MAX_SHOTS, Math.round(sec / TARGET_SHOT_SEC), Math.floor(sec / MIN_SHOT_SEC)));
+  return Math.max(1, Math.min(MAX_SHOTS, Math.floor(sec / MIN_SHOT_SEC)));
 };
 
 export const planShots = (durationInFrames: number, fps: number, opts: PlanOptions): Shot[] => {
