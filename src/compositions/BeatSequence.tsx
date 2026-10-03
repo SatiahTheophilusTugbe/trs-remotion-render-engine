@@ -9,6 +9,7 @@ import { parseWordTimings } from '../lib/captions';
 import { GlassBanner } from './GlassBanner';
 import { BrandBadges } from './BrandBadges';
 import { MusicBed } from './MusicBed';
+import { speechRanges } from '../lib/music';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from './CaptionLayer';
 import { TransitionLayer } from './TransitionLayer';
 import { cutStyleFor, wipeCutFrames } from '../lib/cuts';
@@ -84,7 +85,7 @@ export const BeatSequence: React.FC<{
       })}
       {transitions !== false ? <TransitionLayer cuts={wipeCutFrames(beats, slots)} /> : null}
       <BrandBadges leagueBadge={leagueBadge} />
-      {musicUrl ? <MusicBed src={musicUrl} /> : null}
+      {musicUrl ? <MusicBed src={musicUrl} speech={speechRanges(beats, fps)} /> : null}
     </AbsoluteFill>
   );
 };
