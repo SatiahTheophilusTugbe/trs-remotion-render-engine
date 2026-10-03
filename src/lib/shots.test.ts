@@ -7,6 +7,7 @@ import {
   MOVE_SCALE,
   MOVE_SHIFT,
   SUBJECT_MARGIN,
+  BOX_PAD,
   TIGHT_SCALE,
   WIDE_SCALE,
   focalObjectPosition,
@@ -75,8 +76,8 @@ describe('safeCropScale', () => {
       if (s === null) continue;
       const { vw, vh } = visibleFraction(LANDSCAPE);
       for (const z of [s, s * MOVE_SCALE]) {
-        const [x0, x1] = span(f.x, f.w! / 2 / vw, z);
-        const [y0, y1] = span(f.y, f.h! / 2 / vh, z);
+        const [x0, x1] = span(f.x, (f.w! * BOX_PAD) / 2 / vw, z);
+        const [y0, y1] = span(f.y, (f.h! * BOX_PAD) / 2 / vh, z);
         const m = SUBJECT_MARGIN + MOVE_SHIFT - 1e-9;
         expect(x0).toBeGreaterThanOrEqual(m);
         expect(x1).toBeLessThanOrEqual(1 - m);
@@ -84,6 +85,21 @@ describe('safeCropScale', () => {
         expect(y1).toBeLessThanOrEqual(1 - m);
       }
       expect(s).toBeGreaterThanOrEqual(MIN_CROP_SCALE);
+    }
+  });
+
+  it('a real (slightly off-centre) Claude head box keeps the true head on screen', () => {
+    // Live 13a box for a press-conference photo (2048x1590); the true head spans x 0.40-0.57.
+    const f: Focal = { x: 0.58, y: 0.22, w: 0.28, h: 0.3 };
+    const aspect = 2048 / 1590;
+    const s = safeCropScale(f, aspect);
+    if (s === null) return; // staying wide is always safe
+    const { vw } = visibleFraction(aspect);
+    for (const z of [s, s * MOVE_SCALE]) {
+      const t = Math.max(-(z - 1) / 2, Math.min((z - 1) / 2, -z * (f.x - 0.5)));
+      const toImg = (fx: number) => f.x + ((fx - 0.5 - t) / z + 0.5 - f.x) * vw;
+      expect(toImg(0)).toBeLessThanOrEqual(0.38);
+      expect(toImg(1)).toBeGreaterThanOrEqual(0.59);
     }
   });
 

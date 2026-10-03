@@ -35,6 +35,9 @@ export const FRAME_ASPECT = 1080 / 1920;
 export const MOVE_SCALE = 1.08;
 export const MOVE_SHIFT = 0.03; // fraction of the frame
 export const SUBJECT_MARGIN = 0.05; // keep the subject box at least this far inside the frame edges
+// Claude's subject boxes are approximate (live test 2026-10-03: centre ~0.1 off on a head shot), so
+// every box is treated as this much larger before the fit check -- slack against model imprecision.
+export const BOX_PAD = 1.25;
 export const HOLD_MOVES: HoldMove[] = ['pushIn', 'driftLeft', 'pullOut', 'rise', 'driftRight'];
 // Owner review 2026-10-03: 3-4 cuts per beat felt too fast; one cut per beat (wide -> tight) felt right.
 const MIN_SHOT_SEC = 3;
@@ -67,8 +70,8 @@ const boxSpan = (c: number, half: number, s: number): [number, number] => {
 export const safeCropScale = (focal: Focal | null | undefined, aspect: number | null | undefined): number | null => {
   if (!focal || focal.w === undefined || focal.h === undefined || !aspect || !(aspect > 0)) return null;
   const { vw, vh } = visibleFraction(aspect);
-  const halfW = focal.w / 2 / vw;
-  const halfH = focal.h / 2 / vh;
+  const halfW = (focal.w * BOX_PAD) / 2 / vw;
+  const halfH = (focal.h * BOX_PAD) / 2 / vh;
   const lo = SUBJECT_MARGIN + MOVE_SHIFT;
   const hi = 1 - lo;
   const fits = (s: number) =>
