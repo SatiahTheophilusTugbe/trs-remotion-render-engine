@@ -98,6 +98,19 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
       errors.push(`${p}: photo_url invalid (must be https:// and at most ${MAX_URL_LEN} chars)`);
     }
 
+    // Focal point is an enhancement, never a blocker: invalid values are dropped with a warning.
+    delete beat.focal;
+    if (raw.focal !== undefined && raw.focal !== null) {
+      const f = isObj(raw.focal) ? raw.focal : {};
+      const fx = toNum(f.x);
+      const fy = toNum(f.y);
+      if (Number.isFinite(fx) && Number.isFinite(fy) && fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1) {
+        beat.focal = { x: fx, y: fy };
+      } else {
+        warnings.push(`${p}: focal ignored (needs x and y between 0 and 1)`);
+      }
+    }
+
     if (raw.overlay_text !== undefined && raw.overlay_text !== null) {
       if (typeof raw.overlay_text !== 'string') {
         errors.push(`${p}: overlay_text must be a string`);

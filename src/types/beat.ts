@@ -8,6 +8,9 @@ export type StatData = {
   decimals?: number;
 };
 
+// Image-relative subject position (0-1), from upstream Claude Vision. Present only when captured.
+export type Focal = { x: number; y: number };
+
 type BeatBase = {
   photo_url: string | null;
   audio_url?: string | null;
@@ -17,6 +20,7 @@ type BeatBase = {
   // Stored upstream as a JSON *string*; accepted here as a string or an already-parsed array.
   word_timings?: string | WordTiming[] | null;
   beat_index: number;
+  focal?: Focal | null;
 };
 
 export type AvatarBeatData = BeatBase & { type: 'avatar'; clip_url: string };

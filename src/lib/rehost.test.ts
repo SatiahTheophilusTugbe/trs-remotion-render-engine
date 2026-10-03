@@ -85,6 +85,15 @@ describe('rehostPhotos', () => {
     expect((init.headers as Record<string, string>)['User-Agent']).toBe(BROWSER_USER_AGENT);
   });
 
+  it('carries a beat focal point through rehosting unchanged', async () => {
+    const fetchFn = vi.fn(async () => img('image/png')) as unknown as typeof fetch;
+    const withFocal = [{ ...beats[0], focal: { x: 0.3, y: 0.6 } }];
+    const r = await rehostPhotos(withFocal, 'rid', { fetchFn, put: vi.fn().mockResolvedValue(undefined), resolve: pub });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.beats[0].focal).toEqual({ x: 0.3, y: 0.6 });
+  });
+
   it('still succeeds when the server declares a generic/missing content-type but the bytes are a real image (Telegram quirk)', async () => {
     const put = vi.fn().mockResolvedValue(undefined);
     const fetchFn = vi

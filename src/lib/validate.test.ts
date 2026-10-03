@@ -198,3 +198,29 @@ describe('validateRenderInput', () => {
     okRes(props([broll()], { musicUrl: 'https://m.com/x.mp3' }));
   });
 });
+
+describe('focal point', () => {
+  const focalOf = (focal: unknown) => {
+    const r = okRes(props([broll({ focal })]));
+    return { beat: r.inputProps.beats[0] as Record<string, unknown>, warnings: r.warnings };
+  };
+  it('keeps a valid numeric focal', () => {
+    const { beat, warnings } = focalOf({ x: 0.3, y: 0.6 });
+    expect(beat.focal).toEqual({ x: 0.3, y: 0.6 });
+    expect(warnings).toEqual([]);
+  });
+  it('coerces n8n-stringified focal numbers', () => {
+    expect(focalOf({ x: '0.3', y: '0.6' }).beat.focal).toEqual({ x: 0.3, y: 0.6 });
+  });
+  it.each([[{ x: 1.4, y: 0.5 }], [{ x: 0.5 }], ['abc'], [{ x: '', y: '' }]])('drops invalid focal %j with a warning', (focal) => {
+    const { beat, warnings } = focalOf(focal);
+    expect(beat.focal).toBeUndefined();
+    expect(warnings.some((w) => w.includes('focal ignored'))).toBe(true);
+  });
+  it('treats null or absent focal as no focal, no warning', () => {
+    expect(focalOf(null).beat.focal).toBeUndefined();
+    expect(focalOf(null).warnings).toEqual([]);
+    const r = okRes(props([broll()]));
+    expect((r.inputProps.beats[0] as Record<string, unknown>).focal).toBeUndefined();
+  });
+});
