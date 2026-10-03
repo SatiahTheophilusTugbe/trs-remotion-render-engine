@@ -12,6 +12,7 @@ import { MusicBed } from './MusicBed';
 import { speechRanges } from '../lib/music';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from './CaptionLayer';
 import { TransitionLayer } from './TransitionLayer';
+import { PhotoCredit } from './PhotoCredit';
 import { cutStyleFor, wipeCutFrames } from '../lib/cuts';
 import { SlideShakeCut } from './SlideShakeCut';
 
@@ -63,6 +64,9 @@ export const BeatSequence: React.FC<{
                 <>
                   {renderBeat(beat, fps, motion)}
                   {beat.type === 'broll' && beat.overlay_text ? <GlassBanner text={beat.overlay_text} /> : null}
+                  {beat.photo_credit ? (
+                    <PhotoCredit credit={beat.photo_credit} variant={beat.type === 'avatar' ? 'avatar' : 'broll'} />
+                  ) : null}
                   {(() => {
                     const words = parseWordTimings(beat.word_timings);
                     const show = words.length > 0 && (beat.type !== 'avatar' || CAPTIONS_ON_AVATAR);

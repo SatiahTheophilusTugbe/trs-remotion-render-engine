@@ -25,6 +25,9 @@ type BeatBase = {
   // Pixel size of the photo, measured by rehost from the real bytes (never caller-supplied).
   photo_w?: number;
   photo_h?: number;
+  // Source credit for the photo (e.g. "Getty Images via Bleacher Report"), shown small on screen
+  // while the photo is up. Absent/empty for the owner's own uploads.
+  photo_credit?: string | null;
 };
 
 export type AvatarBeatData = BeatBase & { type: 'avatar'; clip_url: string };

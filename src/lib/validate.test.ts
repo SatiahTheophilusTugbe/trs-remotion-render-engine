@@ -238,3 +238,31 @@ describe('focal point', () => {
     expect((r.inputProps.beats[0] as Record<string, unknown>).focal).toBeUndefined();
   });
 });
+
+describe('photo_credit', () => {
+  const base = {
+    fps: 30,
+    beats: [{ type: 'broll', beat_index: 0, duration_sec: 3, photo_url: 'https://x/p.jpg', narration_line: 'n' }],
+  };
+  const withCredit = (c: unknown) => validateRenderInput({ ...base, beats: [{ ...base.beats[0], photo_credit: c }] });
+  it('keeps a plain source name, whitespace-normalised', () => {
+    const r = withCredit('  Getty   Images ');
+    expect(r.ok && (r.inputProps.beats[0] as { photo_credit?: string }).photo_credit).toBe('Getty Images');
+  });
+  it('drops URL-like or non-string credits with a warning, never an error', () => {
+    for (const c of ['cdn.wnba.com', 'https://espn.com/x', 'www.bbc.co.uk', 42]) {
+      const r = withCredit(c);
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect((r.inputProps.beats[0] as { photo_credit?: string }).photo_credit).toBeUndefined();
+        expect(r.warnings.join(' ')).toContain('photo_credit ignored');
+      }
+    }
+  });
+  it('treats empty/null as no credit, silently', () => {
+    for (const c of ['', null, undefined]) {
+      const r = withCredit(c);
+      expect(r.ok && r.warnings.length).toBe(0);
+    }
+  });
+});

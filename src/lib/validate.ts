@@ -20,6 +20,7 @@ const MAX_TOTAL_SEC = 180;
 const REQUIRED_FPS = 30;
 const MAX_URL_LEN = 2000;
 const MAX_OVERLAY = 80;
+const MAX_CREDIT = 48;
 const MAX_LABEL = 40;
 const MAX_AFFIX = 5;
 const MAX_STAT_CHARS = 11;
@@ -122,6 +123,18 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
         beat.focal = focal;
       } else {
         warnings.push(`${p}: focal ignored (needs x and y between 0 and 1)`);
+      }
+    }
+
+    // Photo credit is an enhancement, never a blocker: anything unusable is dropped with a warning.
+    delete beat.photo_credit;
+    if (raw.photo_credit !== undefined && raw.photo_credit !== null && raw.photo_credit !== '') {
+      const c = typeof raw.photo_credit === 'string' ? raw.photo_credit.replace(/\s+/g, ' ').trim() : '';
+      if (!c || /https?:|www\.|\.[a-z]{2,}\b/i.test(c)) {
+        warnings.push(`${p}: photo_credit ignored (must be a plain source name, not a URL)`);
+      } else {
+        beat.photo_credit = clamp(c, MAX_CREDIT);
+        if (c.length > MAX_CREDIT) warnings.push(`${p}: photo_credit clamped to ${MAX_CREDIT} chars`);
       }
     }
 
