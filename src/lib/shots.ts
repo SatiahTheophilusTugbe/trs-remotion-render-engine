@@ -87,6 +87,9 @@ export const safeCropScale = (focal: Focal | null | undefined, aspect: number | 
 };
 
 export type PhotoLayout = 'cover' | 'letterbox';
+// Group boxes (line-ups, celebrations) span most of the photo; single-person boxes from Claude run
+// ~0.3-0.4 wide (live run 39961). Only a box at least this wide is treated as a group.
+export const GROUP_MIN_W = 0.55;
 
 /**
  * Group photos (owner, 2026-10-03): when a landscape photo's padded subject box is wider than the strip
@@ -95,7 +98,7 @@ export type PhotoLayout = 'cover' | 'letterbox';
  */
 export const photoLayout = (focal: Focal | null | undefined, aspect: number | null | undefined): PhotoLayout => {
   if (!focal || focal.w === undefined || focal.h === undefined || !aspect || !(aspect > FRAME_ASPECT)) return 'cover';
-  if (safeCropScale(focal, aspect) !== null) return 'cover';
+  if (focal.w < GROUP_MIN_W || safeCropScale(focal, aspect) !== null) return 'cover';
   const { vw } = visibleFraction(aspect);
   return (focal.w * BOX_PAD) / vw > 1 - 2 * SUBJECT_MARGIN ? 'letterbox' : 'cover';
 };

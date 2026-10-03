@@ -217,6 +217,11 @@ describe('photoLayout', () => {
     expect(photoLayout(lineup, null)).toBe('cover');
     expect(photoLayout(lineup, 0.5)).toBe('cover');
   });
+  it('a single person with a wide box (live run 39961: w 0.32-0.38) stays full-bleed cover, never letterbox', () => {
+    for (const f of [{ x: 0.55, y: 0.2, w: 0.32, h: 0.22 }, { x: 0.42, y: 0.26, w: 0.35, h: 0.32 }, { x: 0.55, y: 0.28, w: 0.38, h: 0.38 }]) {
+      expect(photoLayout(f, LANDSCAPE)).toBe('cover');
+    }
+  });
   it('a medium subject that fits the strip uncropped stays cover', () => {
     expect(photoLayout({ x: 0.5, y: 0.45, w: 0.22, h: 0.6 }, LANDSCAPE)).toBe('cover');
   });
