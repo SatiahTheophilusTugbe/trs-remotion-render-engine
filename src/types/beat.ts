@@ -8,8 +8,9 @@ export type StatData = {
   decimals?: number;
 };
 
-// Image-relative subject position (0-1), from upstream Claude Vision. Present only when captured.
-export type Focal = { x: number; y: number };
+// Image-relative subject centre (x, y) and optional subject box size (w, h), all 0-1, from upstream
+// Claude Vision. The renderer only crops when a box is present AND the photo's pixel size is known.
+export type Focal = { x: number; y: number; w?: number; h?: number };
 
 type BeatBase = {
   photo_url: string | null;
@@ -21,6 +22,9 @@ type BeatBase = {
   word_timings?: string | WordTiming[] | null;
   beat_index: number;
   focal?: Focal | null;
+  // Pixel size of the photo, measured by rehost from the real bytes (never caller-supplied).
+  photo_w?: number;
+  photo_h?: number;
 };
 
 export type AvatarBeatData = BeatBase & { type: 'avatar'; clip_url: string };

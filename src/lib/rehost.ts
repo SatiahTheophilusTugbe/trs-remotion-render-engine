@@ -1,4 +1,5 @@
 import { lookup } from 'node:dns/promises';
+import { imageDimensions, type ImageDims } from './imageDims.js';
 
 // Server-side photo re-hosting: fetch each beat photo with a browser UA and re-upload it to the
 // Remotion S3 bucket, because some CDNs (e.g. cdn.nba.com) refuse Lambda/headless-Chromium fetches.
@@ -106,11 +107,11 @@ export const formatPhotoError = (
   `beat ${beatIndex} (position ${position}): photo could not be fetched (host=${host}, status=${reason})`;
 
 export type PutObjectFn = (args: { key: string; body: Uint8Array; contentType: string }) => Promise<void>;
-export type RehostBeat = { photo_url?: string | null; beat_index: number };
+export type RehostBeat = { photo_url?: string | null; beat_index: number; photo_w?: number; photo_h?: number };
 export type RehostResult<T> = { ok: true; beats: T[] } | { ok: false; errors: string[] };
 export type ResolveFn = (hostname: string) => Promise<string[]>;
 
-type FetchOutcome = { ok: true; url: string } | { ok: false; error: string };
+type FetchOutcome = { ok: true; url: string; dims: ImageDims | null } | { ok: false; error: string };
 
 /** Thrown internally to carry a short, URL-free failure reason. Exported so other server-side
  *  fetch-and-cap call sites (e.g. api/rehost-telegram-file.ts) can reuse readCapped's error shape
@@ -328,7 +329,7 @@ async function rehostOne(
   } catch {
     return fail('upload_failed');
   }
-  return { ok: true, url: publicUrl(key) };
+  return { ok: true, url: publicUrl(key), dims: imageDimensions(bytes) };
 }
 
 /**
@@ -366,7 +367,14 @@ export async function rehostPhotos<T extends RehostBeat>(
         { fetchFn: deps.fetchFn, put: deps.put, resolve },
         Math.min(FETCH_TIMEOUT_MS, deadline - Date.now()),
       );
-      if (r.ok) out[i].photo_url = r.url;
+      if (r.ok) {
+        out[i].photo_url = r.url;
+        // The shot engine needs each photo's aspect ratio to keep a cropped subject on screen.
+        if (r.dims) {
+          out[i].photo_w = r.dims.width;
+          out[i].photo_h = r.dims.height;
+        }
+      }
       else errors[i] = r.error;
     }
   };

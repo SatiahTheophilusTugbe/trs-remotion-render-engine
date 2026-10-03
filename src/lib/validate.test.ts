@@ -217,6 +217,20 @@ describe('focal point', () => {
     expect(beat.focal).toBeUndefined();
     expect(warnings.some((w) => w.includes('focal ignored'))).toBe(true);
   });
+  it('keeps a valid subject box (w, h) with the focal point', () => {
+    expect(focalOf({ x: 0.4, y: 0.3, w: 0.2, h: '0.35' }).beat.focal).toEqual({ x: 0.4, y: 0.3, w: 0.2, h: 0.35 });
+  });
+  it('drops an invalid box but keeps the point, with a warning', () => {
+    const { beat, warnings } = focalOf({ x: 0.4, y: 0.3, w: 0, h: 1.4 });
+    expect(beat.focal).toEqual({ x: 0.4, y: 0.3 });
+    expect(warnings.some((w) => w.includes('focal box ignored'))).toBe(true);
+  });
+  it('never trusts caller-supplied photo dimensions (rehost measures them)', () => {
+    const r = okRes(props([broll({ photo_w: 10, photo_h: 9999 })]));
+    const b = r.inputProps.beats[0] as Record<string, unknown>;
+    expect(b.photo_w).toBeUndefined();
+    expect(b.photo_h).toBeUndefined();
+  });
   it('treats null or absent focal as no focal, no warning', () => {
     expect(focalOf(null).beat.focal).toBeUndefined();
     expect(focalOf(null).warnings).toEqual([]);

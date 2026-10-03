@@ -100,12 +100,26 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
 
     // Focal point is an enhancement, never a blocker: invalid values are dropped with a warning.
     delete beat.focal;
+    // Photo pixel size is measured by rehost from the real bytes; never trust a caller's value.
+    delete beat.photo_w;
+    delete beat.photo_h;
     if (raw.focal !== undefined && raw.focal !== null) {
       const f = isObj(raw.focal) ? raw.focal : {};
       const fx = toNum(f.x);
       const fy = toNum(f.y);
       if (Number.isFinite(fx) && Number.isFinite(fy) && fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1) {
-        beat.focal = { x: fx, y: fy };
+        const focal: Record<string, number> = { x: fx, y: fy };
+        if (f.w !== undefined || f.h !== undefined) {
+          const fw = toNum(f.w);
+          const fh = toNum(f.h);
+          if (Number.isFinite(fw) && Number.isFinite(fh) && fw > 0 && fw <= 1 && fh > 0 && fh <= 1) {
+            focal.w = fw;
+            focal.h = fh;
+          } else {
+            warnings.push(`${p}: focal box ignored (needs w and h above 0 and at most 1)`);
+          }
+        }
+        beat.focal = focal;
       } else {
         warnings.push(`${p}: focal ignored (needs x and y between 0 and 1)`);
       }

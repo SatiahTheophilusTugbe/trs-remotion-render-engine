@@ -85,6 +85,22 @@ describe('rehostPhotos', () => {
     expect((init.headers as Record<string, string>)['User-Agent']).toBe(BROWSER_USER_AGENT);
   });
 
+  it('records the photo pixel size when the header is readable, and omits it when not', async () => {
+    const png = new Uint8Array(33);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    new DataView(png.buffer).setUint32(16, 1200);
+    new DataView(png.buffer).setUint32(20, 800);
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(imgBytes('image/png', png))
+      .mockResolvedValueOnce(img('image/jpeg')) as unknown as typeof fetch;
+    const r = await rehostPhotos(beats.slice(0, 2), 'rid', { fetchFn, put: vi.fn().mockResolvedValue(undefined), resolve: pub, concurrency: 1 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect([r.beats[0].photo_w, r.beats[0].photo_h]).toEqual([1200, 800]);
+    expect(r.beats[1].photo_w).toBeUndefined();
+  });
+
   it('carries a beat focal point through rehosting unchanged', async () => {
     const fetchFn = vi.fn(async () => img('image/png')) as unknown as typeof fetch;
     const withFocal = [{ ...beats[0], focal: { x: 0.3, y: 0.6 } }];
