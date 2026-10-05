@@ -18,6 +18,7 @@ import {
   RehostFailure,
 } from '../src/lib/rehost.js';
 import type { PutObjectFn } from '../src/lib/rehost.js';
+import { imageDimensions } from '../src/lib/imageDims.js';
 import { redactMessage } from '../src/lib/redact.js';
 
 // Same AWS identity/bucket the photo-rehosting path in submit-render.ts uses.
@@ -142,7 +143,9 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'upload_failed', details: ['upload_failed'] }, { status: 422 });
   }
 
-  return Response.json({ url: publicUrl(objectKey) });
+  // Size lets 13b warn about small uploads (to-do A6, 2026-10-05); null when the header can't be read.
+  const dims = imageDimensions(bytes);
+  return Response.json({ url: publicUrl(objectKey), width: dims?.width ?? null, height: dims?.height ?? null });
 }
 
 export const config = { runtime: 'nodejs' };
