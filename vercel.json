@@ -9,6 +9,9 @@
     },
     "api/render-thumbnail.ts": {
       "maxDuration": 60
+    },
+    "api/rehost-image-url.ts": {
+      "maxDuration": 30
     }
   }
 }

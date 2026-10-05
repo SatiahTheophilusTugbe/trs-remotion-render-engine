@@ -231,7 +231,7 @@ async function assertResolvesPublic(hostname: string, resolve: ResolveFn): Promi
   if (addrs.length === 0 || addrs.some(isBlockedIp)) throw new RehostFailure('blocked');
 }
 
-async function guardedFetch(
+export async function guardedFetch(
   startUrl: string,
   fetchFn: typeof fetch,
   resolve: ResolveFn,
