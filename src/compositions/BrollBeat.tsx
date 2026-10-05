@@ -10,11 +10,11 @@ export const BrollBeat: React.FC<{
   /** Shot-engine options from BeatSequence; bakeoff tooling falls back to DEFAULT_SHOT_MOTION. */
   motion?: ShotMotionOptions;
 }> = ({ beat, motion }) => {
-  const { shot, objectPosition, layout } = useShotFrame(beat, motion);
+  const { shot, objectPosition, layout, smallSize } = useShotFrame(beat, motion);
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
-      <BeatBackground photoUrl={beat.photo_url} objectPosition={objectPosition} shot={shot} layout={layout} />
+      <BeatBackground photoUrl={beat.photo_url} objectPosition={objectPosition} shot={shot} layout={layout} smallSize={smallSize} />
       {beat.audio_url ? <Audio src={beat.audio_url} volume={MASTER_GAIN} /> : null}
     </AbsoluteFill>
   );

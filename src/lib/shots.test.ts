@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  isSmallPhoto,
+  smallPhotoSize,
   FRAMING_CYCLE,
   HOLD_MOVES,
   MID_SCALE,
@@ -227,5 +229,22 @@ describe('photoLayout', () => {
   });
   it('a letterboxed photo is always a single shot', () => {
     expect(planShots(420, FPS, opts({ focal: lineup }))).toHaveLength(1);
+  });
+});
+
+describe('small photos (A6)', () => {
+  it('a 300x390 upload is shown small at 2x, never blown up to fill the frame', () => {
+    expect(isSmallPhoto(300, 390)).toBe(true);
+    expect(photoLayout(null, 300 / 390, 300, 390)).toBe('small');
+    expect(smallPhotoSize(300, 390)).toEqual({ width: 600, height: 780 });
+  });
+  it('normal photos keep their layout', () => {
+    expect(isSmallPhoto(1200, 740)).toBe(false);
+    expect(photoLayout(null, 1200 / 740, 1200, 740)).toBe('cover');
+    expect(isSmallPhoto(undefined, undefined)).toBe(false);
+  });
+  it('the card never exceeds 90% of the frame', () => {
+    const s = smallPhotoSize(590, 100);
+    expect(s.width).toBeLessThanOrEqual(972);
   });
 });

@@ -32,7 +32,9 @@ export const GlassBanner: React.FC<{ text: string }> = ({ text }) => {
   const { fontSize } = glassLayout(text);
 
   const cardIn = spring({ frame: frame - 6, fps, config: { damping: 18, stiffness: 90 }, durationInFrames: 28 });
-  const textIn = spring({ frame: frame - 16, fps, config: { damping: 16, stiffness: 110 }, durationInFrames: 22 });
+  // Text is part of the card (owner review 2026-10-05: the card used to show empty for ~0.3s because the text
+  // faded in 10 frames later). It shares the card's opacity and only rises into place.
+  const textRise = spring({ frame: frame - 6, fps, config: { damping: 16, stiffness: 110 }, durationInFrames: 22 });
   const exit = interpolate(frame, [exitStart, endFrame], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -112,8 +114,7 @@ export const GlassBanner: React.FC<{ text: string }> = ({ text }) => {
             fontWeight: 700,
             lineHeight: GLASS_LINE_HEIGHT,
             letterSpacing: '0.01em',
-            opacity: textIn,
-            transform: `translateY(${(1 - textIn) * 14}px)`,
+            transform: `translateY(${(1 - textRise) * 14}px)`,
             textShadow: '0 2px 14px rgba(0,0,0,0.55)',
             display: '-webkit-box',
             WebkitBoxOrient: 'vertical',

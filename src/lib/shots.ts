@@ -86,7 +86,20 @@ export const safeCropScale = (focal: Focal | null | undefined, aspect: number | 
   return null;
 };
 
-export type PhotoLayout = 'cover' | 'letterbox';
+export type PhotoLayout = 'cover' | 'letterbox' | 'small';
+
+// Small photos (to-do A6, 2026-10-05): a 300x390 Telegram headshot filled the 1080x1920 frame at ~4.9x, a
+// forehead-to-lips crop. A photo whose longest side is under SMALL_PHOTO_MAX_SIDE (the same 600px bar pasted
+// links must pass) is shown whole, at most SMALL_MAX_UPSCALE times its real size, as a card over a blurred copy.
+export const SMALL_PHOTO_MAX_SIDE = 600;
+export const SMALL_MAX_UPSCALE = 2;
+export const isSmallPhoto = (w?: number, h?: number): boolean =>
+  !!w && !!h && Math.max(w, h) < SMALL_PHOTO_MAX_SIDE;
+/** On-screen size of a small photo: its real size times SMALL_MAX_UPSCALE, never beyond 90% of the frame. */
+export const smallPhotoSize = (w: number, h: number, frameW = 1080, frameH = 1920): { width: number; height: number } => {
+  const s = Math.min(SMALL_MAX_UPSCALE, (frameW * 0.9) / w, (frameH * 0.9) / h);
+  return { width: Math.round(w * s), height: Math.round(h * s) };
+};
 // Group boxes (line-ups, celebrations) span most of the photo; single-person boxes from Claude run
 // ~0.3-0.4 wide (live run 39961). Only a box at least this wide is treated as a group.
 export const GROUP_MIN_W = 0.55;
@@ -96,7 +109,8 @@ export const GROUP_MIN_W = 0.55;
  * a 9:16 frame can show, no safe crop exists and full-bleed would cut the group off at the sides -- show
  * the WHOLE photo instead (letterboxed over a blurred copy). Everything else stays full-bleed cover.
  */
-export const photoLayout = (focal: Focal | null | undefined, aspect: number | null | undefined): PhotoLayout => {
+export const photoLayout = (focal: Focal | null | undefined, aspect: number | null | undefined, w?: number, h?: number): PhotoLayout => {
+  if (isSmallPhoto(w, h)) return 'small';
   if (!focal || focal.w === undefined || focal.h === undefined || !aspect || !(aspect > FRAME_ASPECT)) return 'cover';
   if (focal.w < GROUP_MIN_W || safeCropScale(focal, aspect) !== null) return 'cover';
   const { vw } = visibleFraction(aspect);

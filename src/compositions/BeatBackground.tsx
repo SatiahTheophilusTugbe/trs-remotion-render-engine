@@ -10,12 +10,14 @@ export const BeatBackground: React.FC<{
   shot?: ShotFrame;
   /** 'letterbox' = whole photo over a blurred copy (group photos); default full-bleed cover. */
   layout?: PhotoLayout;
+  /** Pixel size of the photo card when layout is 'small'. */
+  smallSize?: { width: number; height: number } | null;
   /**
    * @deprecated Superseded by `shot`. Retained only so the src/bakeoff/ prototype
    * tooling (out of scope for this task) keeps compiling/rendering unchanged.
    */
   scale?: number;
-}> = ({ photoUrl, objectPosition, shot, layout = 'cover', scale }) => {
+}> = ({ photoUrl, objectPosition, shot, layout = 'cover', smallSize, scale }) => {
   const filterId = 'shot-blur-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
   if (!photoUrl) {
     return (
@@ -49,6 +51,36 @@ export const BeatBackground: React.FC<{
       </filter>
     </svg>
   ) : null;
+  if (layout === 'small' && smallSize) {
+    // Small photo: shown whole at a capped size as a framed card over a blurred, darkened copy, so a
+    // low-resolution upload never gets blown up into an extreme close-up. Motion damped like letterbox.
+    const k = 0.4;
+    const fg = shot
+      ? `translate(${(shot.txPct * k).toFixed(3)}%, ${(shot.tyPct * k).toFixed(3)}%) scale(${(1 + (shot.scale - 1) * k).toFixed(4)})`
+      : undefined;
+    return (
+      <PhotoGrade>
+        {blurFilter}
+        <Img
+          src={photoUrl}
+          style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover',
+            filter: 'blur(40px) brightness(0.5)', transform: 'scale(1.15)',
+          }}
+        />
+        <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
+          <Img
+            src={photoUrl}
+            style={{
+              width: smallSize.width, height: smallSize.height, objectFit: 'cover', borderRadius: 24,
+              boxShadow: '0 30px 90px rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.18)',
+              filter: blurred ? `url(#${filterId})` : undefined, transform: fg,
+            }}
+          />
+        </AbsoluteFill>
+      </PhotoGrade>
+    );
+  }
   if (layout === 'letterbox') {
     // Group photos: the WHOLE photo across the frame width, centred, over a still, blurred, darkened
     // full-bleed copy. The shot motion is damped on the foreground so the move never cuts the group.
