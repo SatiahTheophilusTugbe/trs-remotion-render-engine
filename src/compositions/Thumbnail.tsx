@@ -1,14 +1,13 @@
 // src/compositions/Thumbnail.tsx
 import { AbsoluteFill, Img } from 'remotion';
 import { PhotoGrade } from './PhotoGrade';
-import { BrandBadges } from './BrandBadges';
 import { montserratBold } from '../lib/fonts';
 import { focalObjectPosition, safeCropScale } from '../lib/shots';
-import { BADGE_TOP, BAND_TOP, LIME, fitFontSize, thumbLayout, type ThumbnailProps } from '../lib/thumbnail';
+import { BAND_TOP, LIME, fitFontSize, thumbLayout, type ThumbnailProps } from '../lib/thumbnail';
 
 const text = { fontFamily: montserratBold, fontWeight: 700, margin: 0, lineHeight: 1.02, whiteSpace: 'nowrap', WebkitTextStroke: '4px rgba(0,0,0,0.85)', paintOrder: 'stroke fill' } as const;
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ photo_url, focal, photo_w, photo_h, line1, line2, stat, leagueBadge }) => {
+export const Thumbnail: React.FC<ThumbnailProps> = ({ photo_url, focal, photo_w, photo_h, line1, line2, stat }) => {
   const aspect = photo_w && photo_h ? photo_w / photo_h : null;
   const scale = Math.min(1.2, safeCropScale(focal, aspect) ?? 1); // zoom in on the face, never past the subject box
   const origin = focal ? `${focal.x * 100}% ${focal.y * 100}%` : '50% 30%';
@@ -21,9 +20,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ photo_url, focal, photo_w,
           style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: focalObjectPosition(focal), transform: `scale(${scale})`, transformOrigin: origin }}
         />
       </PhotoGrade>
-      <div style={{ position: 'absolute', top: BADGE_TOP, left: 0, right: 0, height: 120 }}>
-        <BrandBadges leagueBadge={leagueBadge} />
-      </div>
+      {/* No brand or league labels on the cover (owner, 2026-10-05: cleaner). */}
       <div style={{ position: 'absolute', left: 0, right: 0, top: BAND_TOP, padding: '36px 60px 40px', backgroundColor: 'rgba(0,0,0,0.72)' }}>
         {layout === 'B' && stat ? (
           <>
