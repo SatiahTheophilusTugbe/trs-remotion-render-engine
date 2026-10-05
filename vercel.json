@@ -6,6 +6,9 @@
     },
     "api/rehost-telegram-file.ts": {
       "maxDuration": 60
+    },
+    "api/render-thumbnail.ts": {
+      "maxDuration": 60
     }
   }
 }

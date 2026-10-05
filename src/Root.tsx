@@ -1,5 +1,6 @@
 import { Composition } from 'remotion';
 import { BeatSequence } from './compositions/BeatSequence';
+import { Thumbnail } from './compositions/Thumbnail';
 import type { Beat } from './types/beat';
 import { framesForBeats } from './lib/duration';
 import { compositionMetadata } from './lib/metadata';
@@ -41,6 +42,7 @@ const defaultBeats: Beat[] = [
 
 export const RemotionRoot: React.FC = () => {
   return (
+    <>
     <Composition
       id="BeatSequence"
       component={BeatSequence}
@@ -51,5 +53,21 @@ export const RemotionRoot: React.FC = () => {
       defaultProps={{ beats: defaultBeats, fps: FPS }}
       calculateMetadata={({ props }) => compositionMetadata(props.beats, props.fps)}
     />
+    <Composition
+      id="Thumbnail"
+      component={Thumbnail}
+      fps={FPS}
+      width={1080}
+      height={1920}
+      durationInFrames={1}
+      defaultProps={{
+        photo_url: defaultBeats[0].photo_url as string,
+        line1: 'BEST OFFENSE EVER.',
+        line2: 'GONE IN ROUND 1',
+        stat: null,
+        leagueBadge: 'WNBA',
+      }}
+    />
+    </>
   );
 };
