@@ -1,4 +1,5 @@
 import { AbsoluteFill, Audio } from 'remotion';
+import { MASTER_GAIN } from '../lib/music';
 import type { StatBeatData } from '../types/beat';
 import { BeatBackground } from './BeatBackground';
 import { OdometerStat } from './OdometerStat';
@@ -20,7 +21,7 @@ export const StatRevealBeat: React.FC<{
         layout={layout}
       />
       <OdometerStat stat={beat.stat} />
-      {beat.audio_url ? <Audio src={beat.audio_url} /> : null}
+      {beat.audio_url ? <Audio src={beat.audio_url} volume={MASTER_GAIN} /> : null}
     </AbsoluteFill>
   );
 };

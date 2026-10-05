@@ -1,4 +1,5 @@
 import { AbsoluteFill, OffthreadVideo } from 'remotion';
+import { MASTER_GAIN } from '../lib/music';
 import type { AvatarBeatData } from '../types/beat';
 import { BeatBackground } from './BeatBackground';
 import { PhotoGrade } from './PhotoGrade';
@@ -33,6 +34,7 @@ export const AvatarBeat: React.FC<{
         <PhotoGrade width={320} vignette={false}>
           <OffthreadVideo
             src={beat.clip_url}
+            volume={MASTER_GAIN}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         </PhotoGrade>

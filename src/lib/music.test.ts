@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { musicVolume, MUSIC_VOLUME } from './music';
+import { musicVolume, MUSIC_VOLUME, MASTER_GAIN } from './music';
 
 describe('musicVolume', () => {
   const total = 300;
@@ -104,5 +104,14 @@ describe('musicLevel', () => {
     expect(musicLevel(240, 300, 30, g, ranges)).toBeCloseTo(g * GAP_LIFT);
     expect(musicLevel(300, 300, 30, g, ranges)).toBe(0);
     expect(musicLevel(60, 300, 30, g, null)).toBeCloseTo(g);
+  });
+});
+
+describe('MASTER_GAIN', () => {
+  it('is +3 dB, leaving headroom over the measured -4.4 dBFS peak', () => {
+    const db = 20 * Math.log10(MASTER_GAIN);
+    expect(db).toBeGreaterThan(2.9);
+    expect(db).toBeLessThan(3.1);
+    expect(-4.4 + db).toBeLessThan(-1);
   });
 });

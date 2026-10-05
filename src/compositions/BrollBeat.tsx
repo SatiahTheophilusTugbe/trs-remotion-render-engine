@@ -1,4 +1,5 @@
 import { AbsoluteFill, Audio } from 'remotion';
+import { MASTER_GAIN } from '../lib/music';
 import type { BrollBeatData } from '../types/beat';
 import { useShotFrame, type ShotMotionOptions } from './useShotFrame';
 import { BeatBackground } from './BeatBackground';
@@ -14,7 +15,7 @@ export const BrollBeat: React.FC<{
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
       <BeatBackground photoUrl={beat.photo_url} objectPosition={objectPosition} shot={shot} layout={layout} />
-      {beat.audio_url ? <Audio src={beat.audio_url} /> : null}
+      {beat.audio_url ? <Audio src={beat.audio_url} volume={MASTER_GAIN} /> : null}
     </AbsoluteFill>
   );
 };

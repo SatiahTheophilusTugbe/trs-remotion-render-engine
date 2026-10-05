@@ -3,6 +3,12 @@ import { parseWordTimings } from './captions';
 
 export const MUSIC_VOLUME = 0.045;
 
+// ── Master level (to-do A11, 2026-10-05): the JJ Gabriel render measured -18 LUFS integrated, peak -4.4 dBFS;
+// ── the platforms normalise to about -14. +3 dB on every source (voice and music, so the ducking balance is
+// ── unchanged) lands near -15 LUFS with the peak at about -1.4 dBFS - louder without clipping. The last dB
+// ── would need a limiter.
+export const MASTER_GAIN = 1.41; // +3 dB
+
 export const musicVolume = (
   frame: number,
   totalFrames: number,
