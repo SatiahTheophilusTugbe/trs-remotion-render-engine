@@ -3,6 +3,7 @@ import { renderMediaOnLambda } from '@remotion/lambda/client';
 import type { AwsRegion } from '@remotion/lambda/client';
 import { validateRenderInput } from '../src/lib/validate.js';
 import { redactMessage } from '../src/lib/redact.js';
+import { webhookFor } from '../src/lib/webhook.js';
 import { rehostPhotos, REHOST_BUCKET, REHOST_REGION } from '../src/lib/rehost.js';
 import type { PutObjectFn } from '../src/lib/rehost.js';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -51,11 +52,14 @@ export async function POST(request: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  const { compositionId, inputProps, framesPerLambda } = body as {
+  const { compositionId, inputProps, framesPerLambda, webhook_url } = body as {
     compositionId?: string;
     inputProps?: unknown;
     framesPerLambda?: unknown;
+    webhook_url?: unknown;
   };
+  // Optional render-complete callback (A1); an unusable URL is ignored and the caller simply polls.
+  const webhook = webhookFor(webhook_url);
 
   // Remotion's MINIMUM_FRAMES_PER_FUNCTION is 5 (@remotion/serverless-client validate-frames-per-function).
   if (framesPerLambda !== undefined && (typeof framesPerLambda !== 'number' || !Number.isInteger(framesPerLambda) || framesPerLambda < 5)) {
@@ -90,8 +94,9 @@ export async function POST(request: Request): Promise<Response> {
       codec: 'h264',
       inputProps: renderProps,
       ...(framesPerLambda !== undefined ? { framesPerLambda } : {}),
+      ...(webhook ? { webhook } : {}),
     });
-    return Response.json({ render_id: renderId, bucket_name: bucketName, warnings: validation.warnings });
+    return Response.json({ render_id: renderId, bucket_name: bucketName, warnings: validation.warnings, webhook: !!webhook });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return Response.json(

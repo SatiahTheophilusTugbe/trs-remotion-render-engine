@@ -41,8 +41,8 @@ describe('trackGain (loudness matching)', () => {
       expect(peak + dB(trackGain(url))).toBeCloseTo(MUSIC_PEAK_UNDER_SPEECH_LUFS, 5);
     }
   });
-  it('keeps the approved Fever level for track 04 (about 0.045)', () => {
-    expect(trackGain('https://h/trs_track_04.mp3')).toBeCloseTo(0.0442, 3);
+  it('sits 3 dB under the approved Fever level for track 04 (owner, 2026-10-05: down a notch)', () => {
+    expect(trackGain('https://h/trs_track_04.mp3')).toBeCloseTo(0.0442 * Math.pow(10, -3 / 20), 3);
   });
   it('gives an unknown track less gain than the loudest known track (never louder)', () => {
     const unknown = trackGain('https://h/brand_new.mp3');

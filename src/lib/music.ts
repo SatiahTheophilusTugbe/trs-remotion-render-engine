@@ -27,7 +27,8 @@ export const musicVolume = (
 // 3-second moment sits at MUSIC_PEAK_UNDER_SPEECH_LUFS while someone is talking: 19.5 LU under the
 // voice, the level of the approved Fever video (track 04 at 0.045). In pauses the bed lifts by
 // GAP_LIFT so it still carries the edit.
-export const MUSIC_PEAK_UNDER_SPEECH_LUFS = -37.5;
+// Owner, 2026-10-05: "bring down a notch" -> 3 dB lower than the approved Fever level (was -37.5).
+export const MUSIC_PEAK_UNDER_SPEECH_LUFS = -40.5;
 export const GAP_LIFT = 1.78; // +5 dB
 
 // Max short-term loudness (LUFS, 3 s window) over each track's first 90 s, measured with
