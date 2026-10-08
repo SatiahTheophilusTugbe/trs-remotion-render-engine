@@ -11,7 +11,10 @@ import {
   SUBJECT_MARGIN,
   BOX_PAD,
   TIGHT_SCALE,
+  INNER_CUTS,
   WIDE_SCALE,
+  WIDE_MOVE_SCALE,
+  WIDE_MOVE_SHIFT,
   focalObjectPosition,
   photoLayout,
   planShots,
@@ -113,37 +116,50 @@ describe('safeCropScale', () => {
 });
 
 describe('shotCount', () => {
-  it('is always 1 when the beat cannot be cropped', () => {
-    expect(shotCount(420, FPS, false)).toBe(1);
-  });
+  // Owner 2026-10-08: re-cut every ~5.5s (never under 3s, at most 4), whether or not the photo can be cropped.
   it.each([
+    [17.6, 4],
+    [15.3, 3],
+    [12.1, 3],
     [10.9, 2],
-    [9.4, 2],
-    [14, 2],
+    [10, 2],
     [6, 2],
     [5, 1],
     [2.5, 1],
     [1, 1],
-  ])('%ss croppable -> %i shots', (sec, n) => {
-    expect(shotCount(Math.round(sec * FPS), FPS, true)).toBe(n);
+    [40, 4],
+  ])('%ss -> %i shots', (sec, n) => {
+    expect(shotCount(Math.round(sec * FPS), FPS)).toBe(n);
   });
 });
 
 describe('planShots', () => {
-  it('no box: one full-frame wide shot spanning the beat', () => {
-    const shots = planShots(330, FPS, opts({ focal: null }));
+  it('no box, short beat: one full-frame wide shot spanning the beat', () => {
+    const shots = planShots(150, FPS, opts({ focal: null }));
     expect(shots).toHaveLength(1);
-    expect(shots[0]).toMatchObject({ from: 0, durationInFrames: 330, scale: WIDE_SCALE, entry: 'slam', whiskOut: true });
+    expect(shots[0]).toMatchObject({ from: 0, durationInFrames: 150, scale: WIDE_SCALE, entry: 'slam', whiskOut: true });
   });
 
-  it('line-up: one wide shot, never a crop', () => {
+  it('no box, long beat (live 17.6s upload): re-cut into wide shots with the big wide moves', () => {
+    const shots = planShots(528, FPS, opts({ focal: null }));
+    expect(shots).toHaveLength(4);
+    shots.forEach((s) => expect(s).toMatchObject({ scale: WIDE_SCALE, moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT }));
+  });
+
+  it('line-up: wide shots only, never a crop', () => {
     const shots = planShots(420, FPS, opts({ focal: lineup }));
-    expect(shots.map((s) => s.scale)).toEqual([WIDE_SCALE]);
+    expect(new Set(shots.map((s) => s.scale))).toEqual(new Set([WIDE_SCALE]));
+  });
+
+  it('long croppable beat alternates wide and the safe crop; only crops use the small budgeted move', () => {
+    const shots = planShots(528, FPS, opts());
+    expect(shots.map((s) => s.scale)).toEqual([WIDE_SCALE, TIGHT_SCALE, WIDE_SCALE, TIGHT_SCALE]);
+    expect(shots.map((s) => s.moveScale)).toEqual([WIDE_MOVE_SCALE, MOVE_SCALE, WIDE_MOVE_SCALE, MOVE_SCALE]);
   });
 
   it('single subject: wide then the safe tight crop', () => {
     expect(FRAMING_CYCLE).toEqual([WIDE_SCALE, TIGHT_SCALE, MID_SCALE]);
-    expect(planShots(420, FPS, opts()).map((s) => s.scale)).toEqual([WIDE_SCALE, TIGHT_SCALE]);
+    expect(planShots(300, FPS, opts()).map((s) => s.scale)).toEqual([WIDE_SCALE, TIGHT_SCALE]);
   });
 
   it('shots tile the beat exactly', () => {
@@ -162,15 +178,25 @@ describe('planShots', () => {
     expect(planShots(420, FPS, opts({ slamIn: false }))[0].entry).toBe('none');
   });
 
-  it('the inner cut is hardPunch or whip, varying by seed', () => {
+  it('inner cuts are random per cut: all four types used, never the same twice in a row', () => {
     const seen = new Set<string>();
-    for (let seed = 0; seed <= 10; seed++) {
-      const inner = planShots(420, FPS, opts({ seed })).slice(1).map((s) => s.entry);
-      expect(inner).toHaveLength(1);
-      expect(['hardPunch', 'whip']).toContain(inner[0]);
-      seen.add(inner[0]);
+    for (let seed = 0; seed <= 30; seed++) {
+      const inner = planShots(528, FPS, opts({ seed })).slice(1).map((s) => s.entry);
+      expect(inner).toHaveLength(3);
+      inner.forEach((e) => expect(INNER_CUTS).toContain(e));
+      for (let k = 1; k < inner.length; k++) expect(inner[k]).not.toBe(inner[k - 1]);
+      seen.add(inner.join(','));
+      inner.forEach((e) => seen.add(e));
     }
-    expect(seen.size).toBe(2);
+    INNER_CUTS.forEach((c) => expect(seen).toContain(c));
+    expect(seen.size).toBeGreaterThan(INNER_CUTS.length + 5); // many different orders, not a fixed cycle
+  });
+
+  it('a lime-wipe beat sweeps in and out instead of slamming and whisking', () => {
+    const shots = planShots(528, FPS, opts({ sweepIn: true, sweepOut: true }));
+    expect(shots[0].entry).toBe('sweep');
+    expect(shots.map((s) => s.sweepOut)).toEqual([false, false, false, true]);
+    expect(shots.some((s) => s.whiskOut)).toBe(false);
   });
 
   it('every shot gets a hold move; consecutive shots differ; beats vary across the whole pool', () => {
@@ -189,7 +215,8 @@ describe('planShots', () => {
   });
 
   it('whiskOut only on the last shot and only when requested', () => {
-    expect(planShots(420, FPS, opts()).map((s) => s.whiskOut)).toEqual([false, true]);
+    expect(planShots(300, FPS, opts()).map((s) => s.whiskOut)).toEqual([false, true]);
+    expect(planShots(528, FPS, opts()).map((s) => s.whiskOut)).toEqual([false, false, false, true]);
     expect(planShots(420, FPS, opts({ whiskOut: false })).some((s) => s.whiskOut)).toBe(false);
   });
 
@@ -227,8 +254,8 @@ describe('photoLayout', () => {
   it('a medium subject that fits the strip uncropped stays cover', () => {
     expect(photoLayout({ x: 0.5, y: 0.45, w: 0.22, h: 0.6 }, LANDSCAPE)).toBe('cover');
   });
-  it('a letterboxed photo is always a single shot', () => {
-    expect(planShots(420, FPS, opts({ focal: lineup }))).toHaveLength(1);
+  it('a letterboxed photo is never cropped', () => {
+    expect(planShots(528, FPS, opts({ focal: lineup })).every((s) => s.scale === WIDE_SCALE)).toBe(true);
   });
 });
 

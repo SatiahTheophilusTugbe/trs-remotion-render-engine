@@ -6,7 +6,10 @@
 // too big to crop (line-ups, group shots, crowds) keeps the beat wide, as-is.
 import type { Focal } from '../types/beat';
 
-export type ShotEntry = 'none' | 'slam' | 'hardPunch' | 'whip';
+export type ShotEntry = 'none' | 'slam' | 'sweep' | InnerCut;
+// Cuts between shots inside one beat, picked at random per cut (owner, 2026-10-08).
+export type InnerCut = 'hardPunch' | 'whip' | 'whipUp' | 'crashZoom';
+export const INNER_CUTS: InnerCut[] = ['hardPunch', 'whip', 'whipUp', 'crashZoom'];
 export type HoldMove = 'pushIn' | 'pullOut' | 'driftLeft' | 'driftRight' | 'rise';
 export type Shot = {
   from: number;
@@ -14,7 +17,12 @@ export type Shot = {
   scale: number;
   entry: ShotEntry;
   whiskOut: boolean;
+  /** Last shot before a lime-wipe cut: shoved along with the wipe instead of whisking. */
+  sweepOut: boolean;
   move: HoldMove;
+  /** Largest extra scale / drift (fraction of frame) this shot's hold move adds. */
+  moveScale: number;
+  moveShift: number;
 };
 export type PlanOptions = {
   focal?: Focal | null;
@@ -22,6 +30,12 @@ export type PlanOptions = {
   seed: number;
   slamIn: boolean;
   whiskOut: boolean;
+  /**
+   * The beat starts / ends on a lime-wipe cut (owner, 2026-10-08: slam + whisk under the wipe looked
+   * messy). The photo then rides the wipe instead: sweepIn replaces the slam, sweepOut the whisk.
+   */
+  sweepIn?: boolean;
+  sweepOut?: boolean;
 };
 
 export const WIDE_SCALE = 1.04; // not 1.0: leaves overscan for the slam overshoot and micro-shake
@@ -32,16 +46,24 @@ export const FRAMING_CYCLE = [WIDE_SCALE, TIGHT_SCALE, MID_SCALE];
 export const FRAME_ASPECT = 1080 / 1920;
 // Hold moves (owner review 2026-10-03: one-cut beats felt idle). Largest extra scale and drift a
 // move adds; shotMotion applies them, the crop-safety check below budgets for them.
+// These are the TIGHT (cropped) shot's moves; safeCropScale budgets for them.
 export const MOVE_SCALE = 1.08;
 export const MOVE_SHIFT = 0.03; // fraction of the frame
+// Wide shots have no crop to protect, so they move much harder (owner review 2026-10-08: photos
+// "almost not moving" on 10-18s beats -- wanted dramatic motion).
+export const WIDE_MOVE_SCALE = 1.2;
+export const WIDE_MOVE_SHIFT = 0.08;
 export const SUBJECT_MARGIN = 0.05; // keep the subject box at least this far inside the frame edges
 // Claude's subject boxes are approximate (live test 2026-10-03: centre ~0.1 off on a head shot), so
 // every box is treated as this much larger before the fit check -- slack against model imprecision.
 export const BOX_PAD = 1.25;
 export const HOLD_MOVES: HoldMove[] = ['pushIn', 'driftLeft', 'pullOut', 'rise', 'driftRight'];
-// Owner review 2026-10-03: 3-4 cuts per beat felt too fast; one cut per beat (wide -> tight) felt right.
+// Owner review 2026-10-03: 3-4 cuts per beat felt too fast; one cut per beat (wide -> tight) felt right
+// on ~8-10s beats. Owner review 2026-10-08: live beats now run 10-18s and one 9-18s shot read as a
+// still, so a long beat is re-cut every ~5.5s (never under 3s), on uncroppable photos too.
 const MIN_SHOT_SEC = 3;
-const MAX_SHOTS = 2;
+export const MAX_SHOT_SEC = 5.5;
+const MAX_SHOTS = 4;
 
 const mulberry32 = (seed: number): number => {
   let t = (seed += 0x6d2b79f5);
@@ -117,32 +139,42 @@ export const photoLayout = (focal: Focal | null | undefined, aspect: number | nu
   return (focal.w * BOX_PAD) / vw > 1 - 2 * SUBJECT_MARGIN ? 'letterbox' : 'cover';
 };
 
-export const shotCount = (durationInFrames: number, fps: number, canCrop: boolean): number => {
-  if (!canCrop) return 1;
+export const shotCount = (durationInFrames: number, fps: number): number => {
   const sec = durationInFrames / fps;
-  return Math.max(1, Math.min(MAX_SHOTS, Math.floor(sec / MIN_SHOT_SEC)));
+  return Math.max(1, Math.min(MAX_SHOTS, Math.ceil(sec / MAX_SHOT_SEC), Math.floor(sec / MIN_SHOT_SEC)));
 };
 
 export const planShots = (durationInFrames: number, fps: number, opts: PlanOptions): Shot[] => {
   if (durationInFrames <= 0) return [];
   const crop = safeCropScale(opts.focal, opts.aspect);
-  const n = shotCount(durationInFrames, fps, crop !== null);
-  const first: ShotEntry = mulberry32(opts.seed) < 0.5 ? 'hardPunch' : 'whip';
-  const second: ShotEntry = first === 'hardPunch' ? 'whip' : 'hardPunch';
+  const n = shotCount(durationInFrames, fps);
+  // Each inner cut is drawn at random from INNER_CUTS, never the same as the cut before it.
+  const cuts: InnerCut[] = [];
+  for (let i = 1; i < n; i++) {
+    const pool = INNER_CUTS.filter((c) => c !== cuts[cuts.length - 1]);
+    cuts.push(pool[Math.floor(mulberry32(opts.seed * 31 + i) * pool.length) % pool.length]);
+  }
+  const firstEntry: ShotEntry = opts.sweepIn ? 'sweep' : opts.slamIn ? 'slam' : 'none';
+  const sweepOut = !!opts.sweepOut;
   // Step 2 through the 5-move pool so consecutive shots never repeat a move.
   const moveStart = Math.floor(mulberry32(opts.seed + 7919) * HOLD_MOVES.length) % HOLD_MOVES.length;
   const shots: Shot[] = [];
   for (let i = 0; i < n; i++) {
     const from = Math.round((i * durationInFrames) / n);
     const to = Math.round(((i + 1) * durationInFrames) / n);
-    const entry: ShotEntry = i === 0 ? (opts.slamIn ? 'slam' : 'none') : i % 2 === 1 ? first : second;
+    const entry: ShotEntry = i === 0 ? firstEntry : cuts[i - 1];
+    // Wide, then alternate with the safe crop; a photo that can't be cropped stays wide on every shot.
+    const tight = crop !== null && i % 2 === 1;
     shots.push({
       from,
       durationInFrames: to - from,
-      scale: i === 0 || crop === null ? WIDE_SCALE : crop,
+      scale: tight ? crop : WIDE_SCALE,
       entry,
-      whiskOut: i === n - 1 && opts.whiskOut,
+      whiskOut: i === n - 1 && opts.whiskOut && !sweepOut,
+      sweepOut: i === n - 1 && sweepOut,
       move: HOLD_MOVES[(moveStart + i * 2) % HOLD_MOVES.length],
+      moveScale: tight ? MOVE_SCALE : WIDE_MOVE_SCALE,
+      moveShift: tight ? MOVE_SHIFT : WIDE_MOVE_SHIFT,
     });
   }
   return shots;

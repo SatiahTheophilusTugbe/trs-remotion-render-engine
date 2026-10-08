@@ -3,7 +3,8 @@
 // bound is |t| <= (s - 1) * 50. Values are tuned by eye on real Lambda renders.
 import { Easing, interpolate } from 'remotion';
 import type { Focal } from '../types/beat';
-import { MOVE_SCALE, MOVE_SHIFT, type HoldMove, type Shot } from './shots';
+import { WIDE_MOVE_SCALE, WIDE_MOVE_SHIFT, type HoldMove, type Shot } from './shots';
+import { WIPE_HALF_FRAMES } from './transitions';
 
 export type ShotFrame = { scale: number; txPct: number; tyPct: number; blurX: number; blurY: number };
 
@@ -22,6 +23,18 @@ export const WHISK_FRAMES = 6;
 export const WHISK_SCALE = 1.3;
 export const WHISK_SHIFT_PCT = -5;
 export const WHISK_BLUR = 36;
+// Lime-wipe cuts (owner, 2026-10-08): the photo travels WITH the wipe (left to right). The outgoing
+// photo is shoved right while the band covers it; the incoming one is revealed behind the band still
+// moving right and settles a few frames after the band clears. Its hold move starts only then.
+export const SWEEP_OUT_FRAMES = WIPE_HALF_FRAMES;
+export const SWEEP_IN_FRAMES = WIPE_HALF_FRAMES + 5;
+export const SWEEP_SHIFT_PCT = 8;
+export const SWEEP_BUMP = 0.16; // extra scale while sweeping, so the shift never exposes an edge
+export const SWEEP_BLUR = 36;
+export const CRASH_FRAMES = 5;
+export const CRASH_AMT = 0.3;
+export const CRASH_BLUR = 18;
+export const CRASH_OUT_FRAMES = 3;
 
 const IDLE: ShotFrame = { scale: 1, txPct: 0, tyPct: 0, blurX: 0, blurY: 0 };
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -29,23 +42,30 @@ const pseudoRand = (n: number, seed: number) => {
   const v = Math.sin(n * 12.9898 + seed * 78.233) * 43758.5453;
   return v - Math.floor(v);
 };
-// Hold move across the whole shot (eased in-out so it never reads as a slow linear pan):
-// returns the scale multiplier and drift (in % of frame). Owner review 2026-10-03: the old
-// 3% push left beats feeling idle.
-const SHIFT_PCT = MOVE_SHIFT * 100;
-export const holdMove = (move: HoldMove, t: number): { m: number; dx: number; dy: number } => {
-  const e = Easing.inOut(Easing.cubic)(clamp(t, 0, 1));
+// Hold move across the whole shot: returns the scale multiplier and drift (in % of frame).
+// Owner review 2026-10-03: the old 3% push left beats feeling idle. Owner review 2026-10-08: the
+// in-out ease sat almost still for the first and last quarter of a shot. HOLD_EASE launches fast
+// out of the cut and is still moving (~40% of average speed) when the next cut lands.
+export const HOLD_EASE = Easing.bezier(0.33, 0.66, 0.75, 0.9);
+export const holdMove = (
+  move: HoldMove,
+  t: number,
+  scaleAmt = WIDE_MOVE_SCALE,
+  shift = WIDE_MOVE_SHIFT,
+): { m: number; dx: number; dy: number } => {
+  const e = HOLD_EASE(clamp(t, 0, 1));
+  const sh = shift * 100;
   switch (move) {
     case 'pushIn':
-      return { m: 1 + (MOVE_SCALE - 1) * e, dx: 0, dy: 0 };
+      return { m: 1 + (scaleAmt - 1) * e, dx: 0, dy: 0 };
     case 'pullOut':
-      return { m: MOVE_SCALE - (MOVE_SCALE - 1) * e, dx: 0, dy: 0 };
+      return { m: scaleAmt - (scaleAmt - 1) * e, dx: 0, dy: 0 };
     case 'driftLeft':
-      return { m: MOVE_SCALE, dx: SHIFT_PCT * (1 - 2 * e), dy: 0 };
+      return { m: scaleAmt, dx: sh * (1 - 2 * e), dy: 0 };
     case 'driftRight':
-      return { m: MOVE_SCALE, dx: -SHIFT_PCT * (1 - 2 * e), dy: 0 };
+      return { m: scaleAmt, dx: -sh * (1 - 2 * e), dy: 0 };
     case 'rise':
-      return { m: MOVE_SCALE, dx: 0, dy: SHIFT_PCT * (1 - 2 * e) };
+      return { m: scaleAmt, dx: 0, dy: sh * (1 - 2 * e) };
   }
 };
 
@@ -60,7 +80,10 @@ export const shotFrameAt = (shots: Shot[], frame: number, focal?: Focal | null):
   const d = shot.durationInFrames;
   const k = clamp(frame - shot.from, 0, d - 1);
 
-  const hold = holdMove(shot.move, d > 1 ? k / (d - 1) : 0);
+  // A swept-in photo holds still until it has settled, then its hold move starts.
+  const e0 = shot.entry === 'sweep' ? Math.min(SWEEP_IN_FRAMES, d - 1) : 0;
+  const span = d - 1 - e0;
+  const hold = holdMove(shot.move, span > 0 ? (k - e0) / span : 0, shot.moveScale, shot.moveShift);
   let mult = hold.m;
   let dx = hold.dx;
   let dy = hold.dy;
@@ -75,6 +98,21 @@ export const shotFrameAt = (shots: Shot[], frame: number, focal?: Focal | null):
     const decay = 1 - (k - SLAM_FRAMES) / SHAKE_FRAMES;
     dx += (pseudoRand(frame, 1) - 0.5) * 2 * SHAKE_PCT * decay;
     dy += (pseudoRand(frame, 2) - 0.5) * 2 * SHAKE_PCT * decay;
+  } else if (shot.entry === 'sweep' && k < SWEEP_IN_FRAMES) {
+    const r = 1 - Easing.out(Easing.cubic)(k / SWEEP_IN_FRAMES);
+    mult *= 1 + SWEEP_BUMP * r;
+    dx -= SWEEP_SHIFT_PCT * r;
+    blurX = SWEEP_BLUR * r * r;
+  } else if (shot.entry === 'crashZoom' && k < CRASH_FRAMES) {
+    const r = Math.pow(1 - k / CRASH_FRAMES, 2);
+    mult *= 1 + CRASH_AMT * r;
+    blurX = CRASH_BLUR * r;
+    blurY = CRASH_BLUR * r;
+  } else if (shot.entry === 'whipUp' && k < WHIP_FRAMES) {
+    const r = Math.pow(1 - k / WHIP_FRAMES, 2);
+    mult *= 1 + WHIP_BUMP * r;
+    dy += WHIP_SHIFT_PCT * r;
+    blurY = WHIP_BLUR * r;
   } else if (shot.entry === 'hardPunch' && k < PUNCH_FRAMES) {
     mult *= 1 + PUNCH_AMT * (1 - k / PUNCH_FRAMES);
   } else if (shot.entry === 'whip' && k < WHIP_FRAMES) {
@@ -87,11 +125,28 @@ export const shotFrameAt = (shots: Shot[], frame: number, focal?: Focal | null):
   const next = shots[i + 1];
   const kWhipOut = k - (d - WHIP_FRAMES);
   const kWhisk = k - (d - WHISK_FRAMES);
+  const kSweep = k - (d - SWEEP_OUT_FRAMES);
+  const kCrash = k - (d - CRASH_OUT_FRAMES);
   if (next && next.entry === 'whip' && kWhipOut >= 0) {
     const p = Math.pow((kWhipOut + 1) / WHIP_FRAMES, 2);
     mult *= 1 + WHIP_BUMP * p;
     dx -= WHIP_SHIFT_PCT * p;
     blurX = WHIP_BLUR * p;
+  } else if (next && next.entry === 'whipUp' && kWhipOut >= 0) {
+    const p = Math.pow((kWhipOut + 1) / WHIP_FRAMES, 2);
+    mult *= 1 + WHIP_BUMP * p;
+    dy -= WHIP_SHIFT_PCT * p;
+    blurY = WHIP_BLUR * p;
+  } else if (next && next.entry === 'crashZoom' && kCrash >= 0) {
+    const p = Math.pow((kCrash + 1) / CRASH_OUT_FRAMES, 2);
+    mult *= 1 + CRASH_AMT * 0.4 * p;
+    blurX = CRASH_BLUR * 0.6 * p;
+    blurY = CRASH_BLUR * 0.6 * p;
+  } else if (!next && shot.sweepOut && kSweep >= 0) {
+    const p = Easing.in(Easing.cubic)((kSweep + 1) / SWEEP_OUT_FRAMES);
+    mult *= 1 + SWEEP_BUMP * p;
+    dx += SWEEP_SHIFT_PCT * p;
+    blurX = Math.max(blurX, SWEEP_BLUR * p);
   } else if (!next && shot.whiskOut && kWhisk >= 0) {
     const p = Easing.in(Easing.cubic)((kWhisk + 1) / WHISK_FRAMES);
     mult *= 1 + (WHISK_SCALE - 1) * p;

@@ -52,6 +52,9 @@ export const BeatSequence: React.FC<{
           seed: index,
           slamIn: index > 0 && !(cutsOn && cutStyleFor(beats, index) === 'slideShake'),
           whiskOut: index < beats.length - 1 && !(cutsOn && cutStyleFor(beats, index + 1) === 'slideShake'),
+          // Lime-wipe cuts: the photo rides the wipe instead of slamming / whisking (owner, 2026-10-08).
+          sweepIn: cutsOn && cutStyleFor(beats, index) === 'wipe',
+          sweepOut: cutsOn && cutStyleFor(beats, index + 1) === 'wipe',
         };
         return (
           <Sequence
