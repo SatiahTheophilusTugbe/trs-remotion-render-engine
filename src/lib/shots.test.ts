@@ -340,6 +340,18 @@ describe('wideMoveBudget (owner 2026-10-11 round 2: protect the face core, keep 
     expect(b.moveShift).toBeGreaterThanOrEqual(WIDE_FLOOR_SHIFT);
   });
 
+  // Round 3 (2026-10-11): 13a's corrected, padded face boxes (3 calls, per-coordinate median, safety pad).
+  it.each([
+    ['beat 2 (p1, Stella)', { x: 0.654, y: 0.249, w: 0.261, h: 0.498 }, 1200 / 799, { moveScale: 1.2, driftScale: 1.2, moveShift: 0.08, axes: 'x', pullOnly: false }],
+    ['beat 4 (p3, Norris + Piastri)', { x: 0.186, y: 0.307, w: 0.288, h: 0.424 }, 768 / 432, { moveScale: 1.12, driftScale: 1.12, moveShift: 0, axes: 'none', pullOnly: false }],
+    ['beat 5 (p4, Stella presser)', { x: 0.504, y: 0.358, w: 0.318, h: 0.716 }, 1600 / 900, { moveScale: 1.2, driftScale: 1.15, moveShift: 0.055, axes: 'x', pullOnly: false }],
+    ['beat 6 (p5, Piastri)', { x: 0.578, y: 0.295, w: 0.23, h: 0.588 }, 3382 / 1902, { moveScale: 1.2, driftScale: 1.2, moveShift: 0.08, axes: 'x', pullOnly: false }],
+  ] as const)('round-3 padded box, real %s: never below the 1.12 floor: %j', (_n, f, aspect, want) => {
+    const b = wideMoveBudget(f, aspect, photoLayout(f, aspect));
+    expect(b).toEqual(want);
+    expect(b.moveScale).toBeGreaterThanOrEqual(WIDE_FLOOR_SCALE);
+  });
+
   it('a giant close-up face (core too big even for the floor push) pulls out only, never freezes', () => {
     const giant = { x: 0.48, y: 0.36, w: 0.52, h: 0.55 }; // the old loose beat 6 box, read as a face
     const b = wideMoveBudget(giant, 3382 / 1902);

@@ -319,6 +319,10 @@ describe('subject safety in the steady state (owner 2026-10-11, round 2: face co
     ['real beat 4 (p3, two faces)', { x: 0.2, y: 0.278, w: 0.221, h: 0.268 }, 768 / 432],
     ['real beat 5 (p4)', { x: 0.525, y: 0.371, w: 0.237, h: 0.653 }, 1600 / 900],
     ['real beat 6 (p5)', { x: 0.636, y: 0.429, w: 0.322, h: 0.784 }, 3382 / 1902],
+    ['round-3 beat 2 (p1)', { x: 0.654, y: 0.249, w: 0.261, h: 0.498 }, 1200 / 799],
+    ['round-3 beat 4 (p3, two faces)', { x: 0.186, y: 0.307, w: 0.288, h: 0.424 }, 768 / 432],
+    ['round-3 beat 5 (p4)', { x: 0.504, y: 0.358, w: 0.318, h: 0.716 }, 1600 / 900],
+    ['round-3 beat 6 (p5)', { x: 0.578, y: 0.295, w: 0.23, h: 0.588 }, 3382 / 1902],
   ];
   const span = (s: ShotFrame, at: number, half: number, axis: 'x' | 'y') => {
     const t = (axis === 'x' ? s.txPct : s.tyPct) / 100;
