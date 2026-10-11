@@ -352,6 +352,14 @@ describe('wideMoveBudget (owner 2026-10-11 round 2: protect the face core, keep 
     expect(b.moveScale).toBeGreaterThanOrEqual(WIDE_FLOOR_SCALE);
   });
 
+  it('round-4 wide group box (beat 4, wider than the 9:16 strip): pull-out at the floor on every shot, never frozen', () => {
+    const f = { x: 0.201, y: 0.31, w: 0.39, h: 0.456 };
+    const aspect = 768 / 432;
+    expect(photoLayout(f, aspect)).toBe('cover');
+    expect(wideMoveBudget(f, aspect)).toEqual({ moveScale: WIDE_FLOOR_SCALE, driftScale: WIDE_FLOOR_SCALE, moveShift: 0, axes: 'none', pullOnly: true });
+    planShots(396, FPS, opts({ focal: f, aspect, seed: 3 })).forEach((s) => expect([s.move, s.moveScale]).toEqual(['pullOut', WIDE_FLOOR_SCALE]));
+  });
+
   it('a giant close-up face (core too big even for the floor push) pulls out only, never freezes', () => {
     const giant = { x: 0.48, y: 0.36, w: 0.52, h: 0.55 }; // the old loose beat 6 box, read as a face
     const b = wideMoveBudget(giant, 3382 / 1902);
