@@ -23,6 +23,15 @@ import {
   subjectFramePosition,
   subjectTranslate,
   wideMoveBudget,
+  faceCore,
+  FULL_WIDE_BUDGET,
+  WIDE_FLOOR_SCALE,
+  WIDE_FLOOR_SHIFT,
+  CORE_W,
+  CORE_H,
+  HEAD_W_PER_H,
+  ALL_HOLD_MOVES,
+  type MoveBudget,
   planShots,
   safeCropScale,
   shotCount,
@@ -299,63 +308,186 @@ describe('subjectFramePosition (owner 2026-10-11: subjects centred, not at their
   });
 });
 
-describe('wideMoveBudget (owner 2026-10-11: wide moves must not push the subject out)', () => {
-  it('photos without a box keep the full dramatic wide move', () => {
-    expect(wideMoveBudget(null, LANDSCAPE)).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
-    expect(wideMoveBudget({ x: 0.5, y: 0.4 }, LANDSCAPE)).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
+describe('wideMoveBudget (owner 2026-10-11 round 2: protect the face core, keep the motion)', () => {
+  const FLOOR: MoveBudget = { moveScale: WIDE_FLOOR_SCALE, driftScale: WIDE_FLOOR_SCALE, moveShift: WIDE_FLOOR_SHIFT, axes: 'xy', pullOnly: false };
+  it('photos without a box keep the full dramatic wide move on both axes', () => {
+    expect(FULL_WIDE_BUDGET).toEqual({ moveScale: WIDE_MOVE_SCALE, driftScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT, axes: 'xy', pullOnly: false });
+    expect(wideMoveBudget(null, LANDSCAPE)).toEqual(FULL_WIDE_BUDGET);
+    expect(wideMoveBudget({ x: 0.5, y: 0.4 }, LANDSCAPE)).toEqual(FULL_WIDE_BUDGET);
   });
   it('a small, centred box keeps the full wide move', () => {
-    expect(wideMoveBudget(person, LANDSCAPE)).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
-  });
-  it('a bigger box gets a reduced move, never below the tight move', () => {
-    const b = wideMoveBudget({ x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, LANDSCAPE);
-    expect(b.moveScale).toBeLessThan(WIDE_MOVE_SCALE);
-    expect(b.moveScale).toBeGreaterThanOrEqual(MOVE_SCALE);
-    expect(b.moveShift).toBeLessThan(WIDE_MOVE_SHIFT);
-    expect(b.moveShift).toBeGreaterThanOrEqual(MOVE_SHIFT);
-  });
-  it('a box that can never fit (real beat 6: w 0.52 on 16:9) gets the tight scale and zero drift', () => {
-    expect(wideMoveBudget({ x: 0.48, y: 0.36, w: 0.52, h: 0.55 }, 3382 / 1902)).toEqual({ moveScale: MOVE_SCALE, moveShift: 0 });
-  });
-  it('the chosen budget keeps the padded box inside the margins over the whole hold', () => {
-    for (const f of [{ x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, { x: 0.3, y: 0.3, w: 0.18, h: 0.4 }, { x: 0.6, y: 0.5, w: 0.22, h: 0.35 }]) {
-      const b = wideMoveBudget(f, LANDSCAPE);
-      if (b.moveShift === 0) continue;
-      const { vw, vh } = visibleFraction(LANDSCAPE);
-      const p = subjectFramePosition(f, LANDSCAPE)!;
-      const m = SUBJECT_MARGIN + b.moveShift - 1e-9;
-      for (const z of [WIDE_SCALE, WIDE_SCALE * b.moveScale]) {
-        const [x0, x1] = span(p.x, (f.w * BOX_PAD) / 2 / vw, z, SUBJECT_TARGET_X);
-        const [y0, y1] = span(p.y, (f.h * BOX_PAD) / 2 / vh, z, SUBJECT_TARGET_Y);
-        expect(x0).toBeGreaterThanOrEqual(m);
-        expect(x1).toBeLessThanOrEqual(1 - m);
-        expect(y0).toBeGreaterThanOrEqual(m);
-        expect(y1).toBeLessThanOrEqual(1 - m);
-      }
-    }
+    expect(wideMoveBudget(person, LANDSCAPE)).toEqual(FULL_WIDE_BUDGET);
   });
   it('letterboxed / small-card photos (whole photo shown) keep the full wide move', () => {
-    expect(wideMoveBudget(lineup, LANDSCAPE, 'letterbox')).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
-    expect(wideMoveBudget(person, LANDSCAPE, 'small')).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
+    expect(wideMoveBudget(lineup, LANDSCAPE, 'letterbox')).toEqual(FULL_WIDE_BUDGET);
+    expect(wideMoveBudget(person, LANDSCAPE, 'small')).toEqual(FULL_WIDE_BUDGET);
   });
-  it('a box on a photo of unknown size gets the tight move (cannot be checked)', () => {
-    expect(wideMoveBudget(person, null)).toEqual({ moveScale: MOVE_SCALE, moveShift: MOVE_SHIFT });
+  it('a box on a photo of unknown size gets the floor move (cannot be checked)', () => {
+    expect(wideMoveBudget(person, null)).toEqual(FLOOR);
   });
-  it('planShots: wide shots use the budget, tight shots keep MOVE_SCALE / MOVE_SHIFT', () => {
-    const big = { x: 0.5, y: 0.45, w: 0.2, h: 0.35 };
-    const b = wideMoveBudget(big, LANDSCAPE);
-    planShots(528, FPS, opts({ focal: big })).forEach((s) => {
-      if (s.scale === WIDE_SCALE) expect({ moveScale: s.moveScale, moveShift: s.moveShift }).toEqual(b);
-      else expect({ moveScale: s.moveScale, moveShift: s.moveShift }).toEqual({ moveScale: MOVE_SCALE, moveShift: MOVE_SHIFT });
+
+  // 13a tight head boxes for the real AVS-mv3zrl17 photos (brief 2026-10-11 round 2).
+  it.each([
+    ['beat 2 (p1, Stella)', { x: 0.647, y: 0.231, w: 0.233, h: 0.451 }, 1200 / 799, { moveScale: 1.2, driftScale: 1.2, moveShift: 0.08, axes: 'x' }],
+    ['beat 4 (p3, Norris + Piastri)', { x: 0.2, y: 0.278, w: 0.221, h: 0.268 }, 768 / 432, { moveScale: 1.2, driftScale: 1.2, moveShift: 0.08, axes: 'x' }],
+    ['beat 5 (p4, Stella presser)', { x: 0.525, y: 0.371, w: 0.237, h: 0.653 }, 1600 / 900, { moveScale: 1.2, driftScale: 1.2, moveShift: 0.08, axes: 'x' }],
+    ['beat 6 (p5, Piastri)', { x: 0.636, y: 0.429, w: 0.322, h: 0.784 }, 3382 / 1902, { moveScale: 1.2, driftScale: 1.14, moveShift: 0.05, axes: 'xy' }],
+  ] as const)('real %s gets at least the 1.12 floor: %j', (_n, f, aspect, want) => {
+    const b = wideMoveBudget(f, aspect);
+    expect(b).toEqual({ ...want, pullOnly: false });
+    expect(b.moveScale).toBeGreaterThanOrEqual(WIDE_FLOOR_SCALE);
+    expect(b.driftScale).toBeGreaterThanOrEqual(WIDE_FLOOR_SCALE);
+    expect(b.moveShift).toBeGreaterThanOrEqual(WIDE_FLOOR_SHIFT);
+  });
+
+  it('a giant close-up face (core too big even for the floor push) pulls out only, never freezes', () => {
+    const giant = { x: 0.48, y: 0.36, w: 0.52, h: 0.55 }; // the old loose beat 6 box, read as a face
+    const b = wideMoveBudget(giant, 3382 / 1902);
+    expect(b).toMatchObject({ moveScale: WIDE_FLOOR_SCALE, pullOnly: true, axes: 'none', moveShift: 0 });
+    for (let seed = 0; seed <= 10; seed++) {
+      planShots(528, FPS, opts({ focal: giant, aspect: 3382 / 1902, seed })).forEach((s) => {
+        expect(s.move).toBe('pullOut');
+        expect(s.moveScale).toBe(WIDE_FLOOR_SCALE);
+      });
+    }
+  });
+
+  it('zero motion is impossible: every boxed wide budget moves at least the floor', () => {
+    let n = 0;
+    for (const aspect of [0.5, 0.75, 1, 1.5, 16 / 9, 2.4]) {
+      for (const x of [0.05, 0.3, 0.5, 0.7, 0.95]) {
+        for (const y of [0.05, 0.25, 0.45, 0.7, 0.95]) {
+          for (const w of [0.05, 0.15, 0.3, 0.5, 0.8]) {
+            for (const h of [0.08, 0.25, 0.5, 0.8]) {
+              const b = wideMoveBudget({ x, y, w, h }, aspect);
+              n++;
+              expect(b.moveScale).toBeGreaterThanOrEqual(WIDE_FLOOR_SCALE);
+              if (b.axes !== 'none') {
+                expect(b.moveShift).toBeGreaterThanOrEqual(WIDE_FLOOR_SHIFT);
+                expect(b.driftScale).toBeGreaterThanOrEqual(WIDE_FLOOR_SCALE);
+              } else expect(b.moveShift).toBe(0);
+            }
+          }
+        }
+      }
+    }
+    expect(n).toBe(3000);
+  });
+
+  it('the face core trims 30% of one head: a single head box loses 30% of its width, a group only one head\'s 30%', () => {
+    const { vw } = visibleFraction(1200 / 799);
+    const single = faceCore({ x: 0.647, y: 0.231, w: 0.233, h: 0.451 }, 1200 / 799)!;
+    expect(single.halfW * 2 * vw).toBeCloseTo(0.233 * CORE_W, 9);
+    expect(single.halfH * 2).toBeCloseTo(0.451 * CORE_H, 9);
+    const aspect = 768 / 432;
+    const group = faceCore({ x: 0.2, y: 0.278, w: 0.221, h: 0.268 }, aspect)!;
+    const headW = (HEAD_W_PER_H * 0.268) / aspect; // one head, in image-width units
+    expect(group.halfW * 2 * visibleFraction(aspect).vw).toBeCloseTo(0.221 - (1 - CORE_W) * headW, 9);
+    expect(faceCore(person, null)).toBeNull();
+    expect(faceCore({ x: 0.5, y: 0.5 }, LANDSCAPE)).toBeNull();
+  });
+
+  it('planShots: drifts hold driftScale, push / pull use moveScale, tight shots keep MOVE_SCALE / MOVE_SHIFT', () => {
+    const p5 = { x: 0.636, y: 0.429, w: 0.322, h: 0.784 };
+    const b = wideMoveBudget(p5, 3382 / 1902);
+    for (let seed = 0; seed <= 10; seed++) {
+      planShots(528, FPS, opts({ focal: p5, aspect: 3382 / 1902, seed })).forEach((s) => {
+        expect(s.scale).toBe(WIDE_SCALE);
+        expect(s.moveScale).toBe(s.move === 'pushIn' || s.move === 'pullOut' ? b.moveScale : b.driftScale);
+        expect(s.moveShift).toBe(b.moveShift);
+      });
+    }
+    planShots(528, FPS, opts()).forEach((s, i) => {
+      if (i % 2) expect({ moveScale: s.moveScale, moveShift: s.moveShift }).toEqual({ moveScale: MOVE_SCALE, moveShift: MOVE_SHIFT });
     });
   });
-  it('planShots: a zero-drift budget turns drifts / rises into push / pull, never the same move twice', () => {
-    const loose = { x: 0.48, y: 0.36, w: 0.52, h: 0.55 };
+
+  it('planShots: drifts only on axes with room; x-only rises become side drifts, never the same move twice', () => {
+    const p1 = { x: 0.647, y: 0.231, w: 0.233, h: 0.451 };
+    expect(wideMoveBudget(p1, 1200 / 799).axes).toBe('x');
+    const seen = new Set<string>();
+    for (let seed = 0; seed <= 30; seed++) {
+      const shots = planShots(528, FPS, opts({ focal: p1, aspect: 1200 / 799, seed }));
+      shots.forEach((s) => expect(['pushIn', 'pullOut', 'driftLeft', 'driftRight']).toContain(s.move));
+      for (let i = 1; i < shots.length; i++) expect(shots[i].move).not.toBe(shots[i - 1].move);
+      shots.forEach((s) => seen.add(s.move));
+    }
+    expect(seen.size).toBe(4);
+  });
+
+  it('planShots: a y-only budget turns side drifts into rise / fall, never the same move twice', () => {
+    const edge = { x: 0.85, y: 0.4, w: 0.1, h: 0.2 }; // clamped at the photo's right edge: no room to drift sideways
+    expect(wideMoveBudget(edge, LANDSCAPE).axes).toBe('y');
+    const seen = new Set<string>();
+    for (let seed = 0; seed <= 30; seed++) {
+      const shots = planShots(528, FPS, opts({ focal: edge, seed }));
+      shots.forEach((s, i) => {
+        if (i % 2 === 0) expect(['pushIn', 'pullOut', 'rise', 'fall']).toContain(s.move);
+        expect(ALL_HOLD_MOVES).toContain(s.move);
+        seen.add(s.move);
+      });
+      for (let i = 1; i < shots.length; i++) expect(shots[i].move).not.toBe(shots[i - 1].move);
+    }
+    expect(seen).toContain('fall');
+    expect(seen).toContain('rise');
+  });
+
+  it('planShots: a zero-drift budget alternates push / pull', () => {
+    // A big face high in a 3:2 photo: the push fits, no drift does (sideways too wide, vertically clamped).
+    const big = { x: 0.3, y: 0.3, w: 0.34, h: 0.35 };
+    expect(wideMoveBudget(big, LANDSCAPE)).toEqual({ moveScale: 1.2, driftScale: 1.2, moveShift: 0, axes: 'none', pullOnly: false });
     for (let seed = 0; seed <= 20; seed++) {
-      const shots = planShots(528, FPS, opts({ focal: loose, aspect: 3382 / 1902, seed }));
+      const shots = planShots(528, FPS, opts({ focal: big, seed }));
       shots.forEach((s) => expect(['pushIn', 'pullOut']).toContain(s.move));
       for (let i = 1; i < shots.length; i++) expect(shots[i].move).not.toBe(shots[i - 1].move);
     }
+  });
+});
+
+describe('regression locks vs ca657d2 (owner: "do not break anything")', () => {
+  it('close-shot safeCropScale results are identical to ca657d2', () => {
+    const cases: [Focal, number, number | null][] = [
+      [person, LANDSCAPE, 1.35],
+      [lineup, LANDSCAPE, null],
+      [{ x: 0.3, y: 0.3, w: 0.12, h: 0.3 }, LANDSCAPE, 1.35],
+      [{ x: 0.62, y: 0.45, w: 0.1, h: 0.2 }, LANDSCAPE, 1.35],
+      [{ x: 0.5, y: 0.2, w: 0.2, h: 0.3 }, LANDSCAPE, null],
+      [{ x: 0.42, y: 0.45, w: 0.18, h: 0.4 }, LANDSCAPE, 1.25],
+      [{ x: 0.58, y: 0.22, w: 0.28, h: 0.3 }, 2048 / 1590, null],
+      [{ x: 0.3, y: 0.4, w: 0.15, h: 0.25 }, LANDSCAPE, 1.35],
+      [{ x: 0.72, y: 0.4, w: 0.15, h: 0.25 }, LANDSCAPE, 1.35],
+      [{ x: 0.5, y: 0.45, w: 0.3, h: 0.45 }, LANDSCAPE, null],
+      [{ x: 0.5, y: 0.06, w: 0.1, h: 0.08 }, 0.4, null],
+      [{ x: 0.85, y: 0.4, w: 0.1, h: 0.2 }, LANDSCAPE, 1.35],
+      [{ x: 0.62, y: 0.3, w: 0.12, h: 0.22 }, 16 / 9, 1.35],
+      [{ x: 0.5, y: 0.25, w: 0.3, h: 0.2 }, 0.75, 1.35],
+      [{ x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, LANDSCAPE, 1.16],
+      [{ x: 0.6, y: 0.5, w: 0.22, h: 0.35 }, LANDSCAPE, null],
+    ];
+    for (const [f, aspect, want] of cases) expect(safeCropScale(f, aspect)).toBe(want);
+  });
+  it('a no-box photo plans exactly the ca657d2 shots (moves, cuts, 1.2 / 0.08)', () => {
+    const pick = (o: Partial<PlanOptions>) =>
+      planShots(528, FPS, opts({ focal: null, ...o })).map((s) => [s.from, s.durationInFrames, s.entry, s.move, s.moveScale, s.moveShift]);
+    expect(pick({ seed: 0 })).toEqual([
+      [0, 132, 'slam', 'rise', 1.2, 0.08],
+      [132, 132, 'whipUp', 'pushIn', 1.2, 0.08],
+      [264, 132, 'crashZoom', 'pullOut', 1.2, 0.08],
+      [396, 132, 'whipUp', 'driftRight', 1.2, 0.08],
+    ]);
+    expect(pick({ seed: 5, sweepIn: true, sweepOut: true })).toEqual([
+      [0, 132, 'sweep', 'driftLeft', 1.2, 0.08],
+      [132, 132, 'whipUp', 'rise', 1.2, 0.08],
+      [264, 132, 'hardPunch', 'pushIn', 1.2, 0.08],
+      [396, 132, 'whip', 'pullOut', 1.2, 0.08],
+    ]);
+  });
+  it('a small croppable box plans exactly the ca657d2 shots (wide 1.2 / 0.08, tight 1.35 at 1.08 / 0.03)', () => {
+    expect(planShots(420, FPS, opts({ seed: 3 })).map((s) => [s.from, s.durationInFrames, s.scale, s.entry, s.move, s.moveScale, s.moveShift])).toEqual([
+      [0, 140, 1.04, 'slam', 'pullOut', 1.2, 0.08],
+      [140, 140, 1.35, 'hardPunch', 'driftRight', 1.08, 0.03],
+      [280, 140, 1.04, 'whipUp', 'driftLeft', 1.2, 0.08],
+    ]);
   });
 });
 

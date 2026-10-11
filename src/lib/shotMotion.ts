@@ -72,6 +72,8 @@ export const holdMove = (
       return { m: scaleAmt, dx: -sh * (1 - 2 * e), dy: 0 };
     case 'rise':
       return { m: scaleAmt, dx: 0, dy: sh * (1 - 2 * e) };
+    case 'fall':
+      return { m: scaleAmt, dx: 0, dy: -sh * (1 - 2 * e) };
   }
 };
 

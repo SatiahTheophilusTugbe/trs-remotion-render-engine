@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ALL_HOLD_MOVES,
   BOX_PAD,
+  CORE_MARGIN,
   HOLD_MOVES,
+  WIDE_FLOOR_SCALE,
+  WIDE_SCALE,
+  faceCore,
+  wideMoveBudget,
   MOVE_SCALE,
   MOVE_SHIFT,
   SUBJECT_MARGIN,
@@ -26,6 +32,7 @@ import {
   WHISK_FRAMES,
   holdMove,
   shotFrameAt,
+  type ShotFrame,
 } from './shotMotion';
 import { WIPE_HALF_FRAMES } from './transitions';
 import type { Focal } from '../types/beat';
@@ -142,7 +149,7 @@ describe('whisk', () => {
 describe('hold moves', () => {
   it('every move visibly changes the frame across the shot (wide and tight amplitudes)', () => {
     for (const [amt, shift] of [[WIDE_MOVE_SCALE, WIDE_MOVE_SHIFT], [MOVE_SCALE, MOVE_SHIFT]]) {
-      for (const move of HOLD_MOVES) {
+      for (const move of ALL_HOLD_MOVES) {
         const a = holdMove(move, 0, amt, shift);
         const b = holdMove(move, 1, amt, shift);
         const scaleChange = Math.abs(b.m - a.m);
@@ -152,14 +159,14 @@ describe('hold moves', () => {
     }
   });
   it('wide moves are dramatic: at least a 15% push or a 12%-of-frame drift', () => {
-    for (const move of HOLD_MOVES) {
+    for (const move of ALL_HOLD_MOVES) {
       const a = holdMove(move, 0);
       const b = holdMove(move, 1);
       expect(Math.abs(b.m - a.m) >= 0.15 || Math.max(Math.abs(b.dx - a.dx), Math.abs(b.dy - a.dy)) >= 12).toBe(true);
     }
   });
   it('moves launch fast out of the cut and never stall before the next one', () => {
-    for (const move of HOLD_MOVES) {
+    for (const move of ALL_HOLD_MOVES) {
       const v = (t: number) => {
         const p = holdMove(move, t);
         const q = holdMove(move, t + 0.01);
@@ -169,6 +176,17 @@ describe('hold moves', () => {
       expect(v(0)).toBeGreaterThan(v(0.5));
       for (const t of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]) expect(v(t)).toBeGreaterThan(avg * 0.25);
     }
+  });
+  it('fall is rise reversed (photo moves down), same zoom', () => {
+    for (const t of [0, 0.3, 0.7, 1]) {
+      const r = holdMove('rise', t);
+      const f = holdMove('fall', t);
+      expect(f.m).toBe(r.m);
+      expect(f.dx).toBe(0);
+      expect(f.dy).toBeCloseTo(-r.dy, 12);
+    }
+    expect(holdMove('fall', 1).dy).toBeGreaterThan(holdMove('fall', 0).dy);
+    expect(HOLD_MOVES).not.toContain('fall'); // the seeded pool is unchanged; fall only replaces a side drift
   });
   it('a beat without a box still moves (never idle)', () => {
     const shots = plan(330, { focal: null, slamIn: false, whiskOut: false });
@@ -273,9 +291,10 @@ describe('random inner cuts', () => {
   });
 });
 
-describe('subject safety in the steady state (owner 2026-10-11)', () => {
+describe('subject safety in the steady state (owner 2026-10-11, round 2: face core on wide shots)', () => {
   // Frames inside an entry / exit transient (slam, shake, whip, crash, punch, sweep, whisk) are short;
-  // every OTHER frame must keep the padded subject box inside the frame margins.
+  // every OTHER frame must keep the face CORE inside CORE_MARGIN on wide shots, and (unchanged from
+  // ca657d2) the padded box inside SUBJECT_MARGIN on tight (cropped) shots.
   const ENTRY: Record<string, number> = {
     none: 0,
     slam: SLAM_FRAMES + SHAKE_FRAMES,
@@ -286,38 +305,66 @@ describe('subject safety in the steady state (owner 2026-10-11)', () => {
     crashZoom: CRASH_FRAMES,
   };
   const EXIT = Math.max(WHIP_FRAMES, CRASH_OUT_FRAMES, SWEEP_OUT_FRAMES, WHISK_FRAMES);
+  const SHAPES = [[300, false], [420, true], [528, false], [528, true]] as const;
   const cases: [string, Focal, number][] = [
     ['person 3:2', person, 1.5],
     ['left of centre', { x: 0.3, y: 0.35, w: 0.12, h: 0.3 }, 1.5],
-    ['near the right edge', { x: 0.85, y: 0.4, w: 0.1, h: 0.2 }, 1.5],
+    ['near the right edge (y drift only)', { x: 0.85, y: 0.4, w: 0.1, h: 0.2 }, 1.5],
     ['high head, 16:9', { x: 0.62, y: 0.3, w: 0.12, h: 0.22 }, 16 / 9],
     ['portrait photo', { x: 0.5, y: 0.25, w: 0.3, h: 0.2 }, 0.75],
-    ['bigger box, reduced wide move', { x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, 1.5],
-    ['bigger box off-centre, reduced wide move', { x: 0.6, y: 0.5, w: 0.22, h: 0.35 }, 1.5],
+    ['bigger box', { x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, 1.5],
+    ['bigger box off-centre', { x: 0.6, y: 0.5, w: 0.22, h: 0.35 }, 1.5],
+    ['big face, push / pull only', { x: 0.3, y: 0.3, w: 0.34, h: 0.35 }, 1.5],
+    ['real beat 2 (p1)', { x: 0.647, y: 0.231, w: 0.233, h: 0.451 }, 1200 / 799],
+    ['real beat 4 (p3, two faces)', { x: 0.2, y: 0.278, w: 0.221, h: 0.268 }, 768 / 432],
+    ['real beat 5 (p4)', { x: 0.525, y: 0.371, w: 0.237, h: 0.653 }, 1600 / 900],
+    ['real beat 6 (p5)', { x: 0.636, y: 0.429, w: 0.322, h: 0.784 }, 3382 / 1902],
   ];
-  it.each(cases)('%s: padded box stays in frame on every steady frame', (_n, f, aspect) => {
+  const span = (s: ShotFrame, at: number, half: number, axis: 'x' | 'y') => {
+    const t = (axis === 'x' ? s.txPct : s.tyPct) / 100;
+    return [0.5 + t + s.scale * (at - half - 0.5), 0.5 + t + s.scale * (at + half - 0.5)];
+  };
+  it.each(cases)('%s: core (wide) / padded box (tight) stays in frame on every steady frame', (_n, f, aspect) => {
+    expect(wideMoveBudget(f, aspect).pullOnly).toBe(false);
     const p = at(f, aspect)!;
+    const core = faceCore(f, aspect)!;
     const { vw, vh } = visibleFraction(aspect);
-    const halfW = (f.w! * BOX_PAD) / 2 / vw;
-    const halfH = (f.h! * BOX_PAD) / 2 / vh;
+    const pad = { halfW: (f.w! * BOX_PAD) / 2 / vw, halfH: (f.h! * BOX_PAD) / 2 / vh };
     const bad: string[] = [];
     for (let seed = 0; seed <= 8; seed++) {
-      for (const [d, sweep] of [[300, false], [420, true], [528, false], [528, true]] as const) {
+      for (const [d, sweep] of SHAPES) {
         const shots = plan(d, { focal: f, aspect, seed, sweepIn: sweep, sweepOut: sweep });
         for (const shot of shots) {
+          const wide = shot.scale === WIDE_SCALE;
+          const box = wide ? core : pad;
+          const m = (wide ? CORE_MARGIN : SUBJECT_MARGIN) - 1e-6;
           for (let k = ENTRY[shot.entry]; k < shot.durationInFrames - EXIT; k++) {
             const s = shotFrameAt(shots, shot.from + k, p);
-            const x0 = 0.5 + s.txPct / 100 + s.scale * (p.x - halfW - 0.5);
-            const x1 = 0.5 + s.txPct / 100 + s.scale * (p.x + halfW - 0.5);
-            const y0 = 0.5 + s.tyPct / 100 + s.scale * (p.y - halfH - 0.5);
-            const y1 = 0.5 + s.tyPct / 100 + s.scale * (p.y + halfH - 0.5);
-            const m = SUBJECT_MARGIN - 1e-6;
-            if (x0 < m || x1 > 1 - m || y0 < m || y1 > 1 - m) bad.push(`${seed}/${d}/${shot.from + k}`);
+            const [x0, x1] = span(s, p.x, box.halfW, 'x');
+            const [y0, y1] = span(s, p.y, box.halfH, 'y');
+            if (x0 < m || x1 > 1 - m || y0 < m || y1 > 1 - m) bad.push(`${seed}/${d}/${shot.from + k}/${shot.move}`);
           }
         }
       }
     }
     expect(bad).toEqual([]);
+  });
+  it('a pull-only shot (giant close-up face) visibly pulls out and ends at the widest framing', () => {
+    const giant: Focal = { x: 0.48, y: 0.36, w: 0.52, h: 0.55 };
+    const aspect = 3382 / 1902;
+    const p = at(giant, aspect)!;
+    for (let seed = 0; seed <= 4; seed++) {
+      const shots = plan(528, { focal: giant, aspect, seed, slamIn: false, whiskOut: false });
+      for (const shot of shots) {
+        expect(shot.move).toBe('pullOut');
+        const a = shotFrameAt(shots, shot.from + ENTRY[shot.entry], p); // first frame after the cut's transient
+        // Last frame before the exit transient (the next cut's whip / crash) -- the hold is nearly done.
+        const z = shotFrameAt(shots, shot.from + shot.durationInFrames - 1 - EXIT, p);
+        expect(shot.moveScale).toBe(WIDE_FLOOR_SCALE); // starts at the floor zoom ...
+        expect(z.scale).toBeLessThan(WIDE_SCALE * 1.03); // ... ends (almost) wide
+        expect(a.scale / z.scale).toBeGreaterThan(1.06); // a visible pull, never a still
+      }
+    }
   });
   it('transients settle: after its entry the frame is exactly the hold move (nothing left over)', () => {
     for (let seed = 0; seed <= 8; seed++) {
@@ -331,5 +378,36 @@ describe('subject safety in the steady state (owner 2026-10-11)', () => {
         expect(s.scale).toBeCloseTo(Math.max(1, shot.scale * hold.m), 9);
       }
     }
+  });
+  it('zero motion is impossible: every wide shot of every boxed photo visibly moves (rendered frames)', () => {
+    const still: string[] = [];
+    let shotsChecked = 0;
+    for (const aspect of [0.5, 0.75, 1.5, 16 / 9, 2.4]) {
+      for (const x of [0.1, 0.5, 0.85]) {
+        for (const y of [0.1, 0.4, 0.8]) {
+          for (const w of [0.08, 0.25, 0.5]) {
+            for (const h of [0.15, 0.45, 0.85]) {
+              const f: Focal = { x, y, w, h };
+              const p = at(f, aspect);
+              for (const seed of [0, 1, 2]) {
+                const shots = plan(420, { focal: f, aspect, seed, slamIn: false, whiskOut: false });
+                for (const shot of shots) {
+                  if (shot.scale !== WIDE_SCALE) continue;
+                  shotsChecked++;
+                  const k0 = ENTRY[shot.entry];
+                  const a = shotFrameAt(shots, shot.from + k0, p);
+                  const b = shotFrameAt(shots, shot.from + shot.durationInFrames - 1 - EXIT, p);
+                  const zoom = Math.abs(b.scale - a.scale) / a.scale;
+                  const pan = Math.max(Math.abs(b.txPct - a.txPct), Math.abs(b.tyPct - a.tyPct));
+                  if (!(zoom >= 0.05 || pan >= 3)) still.push(JSON.stringify({ f, aspect, seed, move: shot.move, zoom, pan }));
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(shotsChecked).toBeGreaterThan(1000);
+    expect(still).toEqual([]);
   });
 });
