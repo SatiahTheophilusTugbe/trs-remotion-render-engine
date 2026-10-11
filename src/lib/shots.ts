@@ -27,6 +27,11 @@ export type Shot = {
 export type PlanOptions = {
   focal?: Focal | null;
   aspect?: number | null; // photo width / height
+  /**
+   * How the photo is shown (photoLayout). Only 'cover' crops the photo to the frame, so only cover photos
+   * budget their wide motion against the subject box; letterbox / small cards show the whole photo.
+   */
+  layout?: PhotoLayout;
   seed: number;
   slamIn: boolean;
   whiskOut: boolean;
@@ -49,11 +54,17 @@ export const FRAME_ASPECT = 1080 / 1920;
 // These are the TIGHT (cropped) shot's moves; safeCropScale budgets for them.
 export const MOVE_SCALE = 1.08;
 export const MOVE_SHIFT = 0.03; // fraction of the frame
-// Wide shots have no crop to protect, so they move much harder (owner review 2026-10-08: photos
-// "almost not moving" on 10-18s beats -- wanted dramatic motion).
+// Wide shots move much harder (owner review 2026-10-08: photos "almost not moving" on 10-18s beats --
+// wanted dramatic motion). Owner review 2026-10-11: the full wide move pushed faces out of frame, so a
+// wide shot WITH a subject box only gets as much of it as keeps the padded box on screen
+// (wideMoveBudget); photos without a box keep the full move.
 export const WIDE_MOVE_SCALE = 1.2;
 export const WIDE_MOVE_SHIFT = 0.08;
 export const SUBJECT_MARGIN = 0.05; // keep the subject box at least this far inside the frame edges
+// Where the subject box centre is placed in the frame (owner, 2026-10-11): horizontally centred,
+// vertically a little high (faces read better above the middle). Clamped so no photo edge shows.
+export const SUBJECT_TARGET_X = 0.5;
+export const SUBJECT_TARGET_Y = 0.42;
 // Claude's subject boxes are approximate (live test 2026-10-03: centre ~0.1 off on a head shot), so
 // every box is treated as this much larger before the fit check -- slack against model imprecision.
 export const BOX_PAD = 1.25;
@@ -76,12 +87,85 @@ const mulberry32 = (seed: number): number => {
 export const visibleFraction = (aspect: number): { vw: number; vh: number } =>
   aspect > FRAME_ASPECT ? { vw: FRAME_ASPECT / aspect, vh: 1 } : { vw: 1, vh: aspect / FRAME_ASPECT };
 
-// Frame-space extent of the subject box along one axis at zoom s. object-position = focal puts the
-// box centre c at frame fraction c, so a half-width `half` (frame units) spans c +/- half; the
-// zoom is centred with the same clamped translate shotMotion uses.
-const boxSpan = (c: number, half: number, s: number): [number, number] => {
-  const t = Math.max(-(s - 1) / 2, Math.min((s - 1) / 2, -s * (c - 0.5)));
-  return [0.5 + t + s * (c - half - 0.5), 0.5 + t + s * (c + half - 0.5)];
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * Under object-fit: cover, object-position p on an axis whose visible fraction is v puts image point u
+ * at frame fraction p * (1 - 1/v) + u / v. Picks the p (clamped to 0..1, so no photo edge shows) that
+ * puts image point c at frame fraction `target`, and returns where c actually lands. An axis whose
+ * whole extent is visible (v = 1) is unaffected by object-position: c stays at c.
+ */
+const placeOnAxis = (c: number, v: number, target: number): { p: number; at: number } => {
+  if (!(v < 1)) return { p: c, at: c };
+  const p = clamp((c - target * v) / (1 - v), 0, 1);
+  return { p, at: p * (1 - 1 / v) + c / v };
+};
+
+export type SubjectPosition = {
+  /** Frame fractions (0-1) where the subject box centre sits before any zoom / translate. */
+  x: number;
+  y: number;
+  /** CSS object-position for the cover-fit photo that produces that placement. */
+  objectPosition: string;
+};
+
+const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
+
+/**
+ * Where the subject box centre lands in the frame, and the object-position that puts it there. With the
+ * photo size known, the box centre is placed at (SUBJECT_TARGET_X, SUBJECT_TARGET_Y), clamped so no
+ * photo edge shows. Without the size, the old proportional placement (object-position = focal, which
+ * leaves the centre at frame fraction focal) is kept. No focal: null (the renderer uses 'center top').
+ */
+export const subjectFramePosition = (
+  focal: Focal | null | undefined,
+  aspect: number | null | undefined,
+): SubjectPosition | null => {
+  if (!focal) return null;
+  if (!aspect || !(aspect > 0)) return { x: focal.x, y: focal.y, objectPosition: `${pct(focal.x)} ${pct(focal.y)}` };
+  const { vw, vh } = visibleFraction(aspect);
+  const h = placeOnAxis(focal.x, vw, SUBJECT_TARGET_X);
+  const v = placeOnAxis(focal.y, vh, SUBJECT_TARGET_Y);
+  return { x: h.at, y: v.at, objectPosition: `${pct(h.p)} ${pct(v.p)}` };
+};
+
+/**
+ * Translate (fraction of the frame) that moves frame point `at` toward `target` under a zoom s about the
+ * frame centre, clamped to the edge-safe bound (s - 1) / 2. shotMotion applies the same translate.
+ */
+export const subjectTranslate = (at: number, target: number, s: number): number =>
+  clamp(target - 0.5 - s * (at - 0.5), -(s - 1) / 2, (s - 1) / 2);
+
+// Frame-space extent of the subject box along one axis at zoom s: box centre at frame fraction `at`
+// (subjectFramePosition), half-size `half` (frame units), centred with the clamped subjectTranslate.
+const boxSpan = (at: number, half: number, s: number, target: number): [number, number] => {
+  const t = subjectTranslate(at, target, s);
+  return [0.5 + t + s * (at - half - 0.5), 0.5 + t + s * (at + half - 0.5)];
+};
+
+type PaddedBox = { pos: SubjectPosition; halfW: number; halfH: number };
+const paddedBox = (focal: Focal | null | undefined, aspect: number | null | undefined): PaddedBox | null => {
+  if (!focal || focal.w === undefined || focal.h === undefined || !aspect || !(aspect > 0)) return null;
+  const { vw, vh } = visibleFraction(aspect);
+  return {
+    pos: subjectFramePosition(focal, aspect)!,
+    halfW: (focal.w * BOX_PAD) / 2 / vw,
+    halfH: (focal.h * BOX_PAD) / 2 / vh,
+  };
+};
+
+// The padded box stays at least SUBJECT_MARGIN + shift inside every frame edge at every zoom of a hold
+// that runs from s to s * moveScale (sampled; a drift of up to `shift` is budgeted as extra margin).
+const boxFits = (b: PaddedBox, s: number, moveScale: number, shift: number): boolean => {
+  const lo = SUBJECT_MARGIN + shift - 1e-9;
+  const hi = 1 - lo;
+  for (let i = 0; i <= 8; i++) {
+    const z = s * (1 + ((moveScale - 1) * i) / 8);
+    const [x0, x1] = boxSpan(b.pos.x, b.halfW, z, SUBJECT_TARGET_X);
+    const [y0, y1] = boxSpan(b.pos.y, b.halfH, z, SUBJECT_TARGET_Y);
+    if (!(x0 >= lo && x1 <= hi && y0 >= lo && y1 <= hi)) return false;
+  }
+  return true;
 };
 
 /**
@@ -90,22 +174,40 @@ const boxSpan = (c: number, half: number, s: number): [number, number] => {
  * would cut the subject (line-ups, group shots) -- those beats stay wide, as-is.
  */
 export const safeCropScale = (focal: Focal | null | undefined, aspect: number | null | undefined): number | null => {
-  if (!focal || focal.w === undefined || focal.h === undefined || !aspect || !(aspect > 0)) return null;
-  const { vw, vh } = visibleFraction(aspect);
-  const halfW = (focal.w * BOX_PAD) / 2 / vw;
-  const halfH = (focal.h * BOX_PAD) / 2 / vh;
-  const lo = SUBJECT_MARGIN + MOVE_SHIFT;
-  const hi = 1 - lo;
-  const fits = (s: number) =>
-    [s, s * MOVE_SCALE].every((z) => {
-      const [x0, x1] = boxSpan(focal.x, halfW, z);
-      const [y0, y1] = boxSpan(focal.y, halfH, z);
-      return x0 >= lo && x1 <= hi && y0 >= lo && y1 <= hi;
-    });
+  const b = paddedBox(focal, aspect);
+  if (!b) return null;
   for (let i = Math.round(TIGHT_SCALE * 100); i >= Math.round(MIN_CROP_SCALE * 100); i--) {
-    if (fits(i / 100)) return i / 100;
+    if (boxFits(b, i / 100, MOVE_SCALE, MOVE_SHIFT)) return i / 100;
   }
   return null;
+};
+
+export type MoveBudget = { moveScale: number; moveShift: number };
+export const WIDE_BUDGET_STEPS = 12;
+/**
+ * Hold-move budget for a WIDE shot (owner, 2026-10-11). No subject box, or a photo that is not cover-
+ * cropped: the full WIDE_MOVE_SCALE / WIDE_MOVE_SHIFT. With a box: the largest step from the full wide
+ * move down to the tight move (MOVE_SCALE / MOVE_SHIFT) that keeps the padded box inside the frame
+ * margins; if even that cuts the box (a loose box wider than the visible strip), MOVE_SCALE with zero
+ * drift. A box on a photo of unknown size cannot be checked, so it gets the tight move.
+ */
+export const wideMoveBudget = (
+  focal: Focal | null | undefined,
+  aspect: number | null | undefined,
+  layout: PhotoLayout = 'cover',
+): MoveBudget => {
+  if (!focal || focal.w === undefined || focal.h === undefined || layout !== 'cover') {
+    return { moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT };
+  }
+  const b = paddedBox(focal, aspect);
+  if (!b) return { moveScale: MOVE_SCALE, moveShift: MOVE_SHIFT };
+  for (let i = 0; i <= WIDE_BUDGET_STEPS; i++) {
+    const k = i / WIDE_BUDGET_STEPS;
+    const moveScale = Math.round((WIDE_MOVE_SCALE + (MOVE_SCALE - WIDE_MOVE_SCALE) * k) * 1e4) / 1e4;
+    const moveShift = Math.round((WIDE_MOVE_SHIFT + (MOVE_SHIFT - WIDE_MOVE_SHIFT) * k) * 1e4) / 1e4;
+    if (boxFits(b, WIDE_SCALE, moveScale, moveShift)) return { moveScale, moveShift };
+  }
+  return { moveScale: MOVE_SCALE, moveShift: 0 };
 };
 
 export type PhotoLayout = 'cover' | 'letterbox' | 'small';
@@ -147,6 +249,7 @@ export const shotCount = (durationInFrames: number, fps: number): number => {
 export const planShots = (durationInFrames: number, fps: number, opts: PlanOptions): Shot[] => {
   if (durationInFrames <= 0) return [];
   const crop = safeCropScale(opts.focal, opts.aspect);
+  const wide = wideMoveBudget(opts.focal, opts.aspect, opts.layout);
   const n = shotCount(durationInFrames, fps);
   // Each inner cut is drawn at random from INNER_CUTS, never the same as the cut before it.
   const cuts: InnerCut[] = [];
@@ -165,6 +268,18 @@ export const planShots = (durationInFrames: number, fps: number, opts: PlanOptio
     const entry: ShotEntry = i === 0 ? firstEntry : cuts[i - 1];
     // Wide, then alternate with the safe crop; a photo that can't be cropped stays wide on every shot.
     const tight = crop !== null && i % 2 === 1;
+    const budget = tight ? { moveScale: MOVE_SCALE, moveShift: MOVE_SHIFT } : wide;
+    const prev = shots[i - 1]?.move;
+    let slot = (moveStart + i * 2) % HOLD_MOVES.length;
+    let move = HOLD_MOVES[slot];
+    if (budget.moveShift === 0) {
+      // A zero-drift budget would freeze a drift / rise into a still zoom: push or pull instead,
+      // never the same as the shot before.
+      if ((move !== 'pushIn' && move !== 'pullOut') || move === prev) move = prev === 'pushIn' ? 'pullOut' : 'pushIn';
+    } else {
+      // The pool step never repeats on its own; a repeat is only possible after a swap above.
+      while (move === prev) move = HOLD_MOVES[(slot = (slot + 1) % HOLD_MOVES.length)];
+    }
     shots.push({
       from,
       durationInFrames: to - from,
@@ -172,15 +287,14 @@ export const planShots = (durationInFrames: number, fps: number, opts: PlanOptio
       entry,
       whiskOut: i === n - 1 && opts.whiskOut && !sweepOut,
       sweepOut: i === n - 1 && sweepOut,
-      move: HOLD_MOVES[(moveStart + i * 2) % HOLD_MOVES.length],
-      moveScale: tight ? MOVE_SCALE : WIDE_MOVE_SCALE,
-      moveShift: tight ? MOVE_SHIFT : WIDE_MOVE_SHIFT,
+      move,
+      ...budget,
     });
   }
   return shots;
 };
 
-// object-position p% puts the image point at fraction p at fraction p of the frame (cover fit),
-// so the subject centre is always on screen even when a landscape photo is cropped to portrait.
-export const focalObjectPosition = (focal?: Focal | null): string =>
-  focal ? `${(focal.x * 100).toFixed(2)}% ${(focal.y * 100).toFixed(2)}%` : 'center top';
+// CSS object-position for the cover-fit photo: the subject box centred (subjectFramePosition) when the
+// photo size is known, the old proportional focal placement when it is not, 'center top' without a focal.
+export const focalObjectPosition = (focal?: Focal | null, aspect?: number | null): string =>
+  subjectFramePosition(focal, aspect)?.objectPosition ?? 'center top';

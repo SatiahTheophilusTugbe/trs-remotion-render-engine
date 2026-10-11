@@ -2,8 +2,14 @@
 // the frame and applied as `translate(tx%, ty%) scale(s)` around the centre, so the edge-safe
 // bound is |t| <= (s - 1) * 50. Values are tuned by eye on real Lambda renders.
 import { Easing, interpolate } from 'remotion';
-import type { Focal } from '../types/beat';
-import { WIDE_MOVE_SCALE, WIDE_MOVE_SHIFT, type HoldMove, type Shot } from './shots';
+import {
+  SUBJECT_TARGET_X,
+  SUBJECT_TARGET_Y,
+  WIDE_MOVE_SCALE,
+  WIDE_MOVE_SHIFT,
+  type HoldMove,
+  type Shot,
+} from './shots';
 import { WIPE_HALF_FRAMES } from './transitions';
 
 export type ShotFrame = { scale: number; txPct: number; tyPct: number; blurX: number; blurY: number };
@@ -69,10 +75,16 @@ export const holdMove = (
   }
 };
 
-// Translate (in % of frame) that brings image fraction f to the frame centre at this scale.
-const centreOn = (f: number | undefined, scale: number) => (f === undefined ? 0 : -scale * (f - 0.5) * 100);
+// Translate (in % of frame, before the edge clamp) that brings frame point `at` (where the subject box
+// centre sits before any zoom) to `target` at this scale. Same maths as shots.ts subjectTranslate.
+const centreOn = (at: number | undefined, target: number, scale: number) =>
+  at === undefined ? 0 : (target - 0.5 - scale * (at - 0.5)) * 100;
 
-export const shotFrameAt = (shots: Shot[], frame: number, focal?: Focal | null): ShotFrame => {
+/**
+ * Transform for one frame of a planned shot list. `subject` is the subject box centre in FRAME
+ * fractions as placed by the object-position (shots.ts subjectFramePosition), not the raw focal.
+ */
+export const shotFrameAt = (shots: Shot[], frame: number, subject?: { x: number; y: number } | null): ShotFrame => {
   if (!shots.length) return IDLE;
   let i = shots.findIndex((s) => frame >= s.from && frame < s.from + s.durationInFrames);
   if (i === -1) i = frame < 0 ? 0 : shots.length - 1;
@@ -158,8 +170,8 @@ export const shotFrameAt = (shots: Shot[], frame: number, focal?: Focal | null):
   const limit = (scale - 1) * 50;
   return {
     scale,
-    txPct: clamp(centreOn(focal?.x, scale) + dx, -limit, limit),
-    tyPct: clamp(centreOn(focal?.y, scale) + dy, -limit, limit),
+    txPct: clamp(centreOn(subject?.x, SUBJECT_TARGET_X, scale) + dx, -limit, limit),
+    tyPct: clamp(centreOn(subject?.y, SUBJECT_TARGET_Y, scale) + dy, -limit, limit),
     blurX,
     blurY,
   };

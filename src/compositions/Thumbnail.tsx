@@ -2,7 +2,7 @@
 import { AbsoluteFill, Img } from 'remotion';
 import { PhotoGrade } from './PhotoGrade';
 import { montserratBold } from '../lib/fonts';
-import { focalObjectPosition, safeCropScale } from '../lib/shots';
+import { safeCropScale, subjectFramePosition } from '../lib/shots';
 import { BAND_TOP, LIME, fitFontSize, thumbLayout, type ThumbnailProps } from '../lib/thumbnail';
 
 const text = { fontFamily: montserratBold, fontWeight: 700, margin: 0, lineHeight: 1.02, whiteSpace: 'nowrap', WebkitTextStroke: '4px rgba(0,0,0,0.85)', paintOrder: 'stroke fill' } as const;
@@ -10,14 +10,17 @@ const text = { fontFamily: montserratBold, fontWeight: 700, margin: 0, lineHeigh
 export const Thumbnail: React.FC<ThumbnailProps> = ({ photo_url, focal, photo_w, photo_h, line1, line2, stat }) => {
   const aspect = photo_w && photo_h ? photo_w / photo_h : null;
   const scale = Math.min(1.2, safeCropScale(focal, aspect) ?? 1); // zoom in on the face, never past the subject box
-  const origin = focal ? `${focal.x * 100}% ${focal.y * 100}%` : '50% 30%';
+  // Same centring as the video (owner, 2026-10-11): the subject box centre placed mid-frame, ~42% down,
+  // and the zoom anchored on it so it stays there.
+  const subject = subjectFramePosition(focal, aspect);
+  const origin = subject ? `${subject.x * 100}% ${subject.y * 100}%` : '50% 30%';
   const layout = thumbLayout(stat);
   return (
     <AbsoluteFill style={{ backgroundColor: '#0a0a0a' }}>
       <PhotoGrade>
         <Img
           src={photo_url}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: focalObjectPosition(focal), transform: `scale(${scale})`, transformOrigin: origin }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: subject?.objectPosition ?? 'center top', transform: `scale(${scale})`, transformOrigin: origin }}
         />
       </PhotoGrade>
       {/* No brand or league labels on the cover (owner, 2026-10-05: cleaner). */}

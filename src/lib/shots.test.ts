@@ -15,8 +15,14 @@ import {
   WIDE_SCALE,
   WIDE_MOVE_SCALE,
   WIDE_MOVE_SHIFT,
+  FRAME_ASPECT,
+  SUBJECT_TARGET_X,
+  SUBJECT_TARGET_Y,
   focalObjectPosition,
   photoLayout,
+  subjectFramePosition,
+  subjectTranslate,
+  wideMoveBudget,
   planShots,
   safeCropScale,
   shotCount,
@@ -40,11 +46,15 @@ const opts = (o: Partial<PlanOptions> = {}): PlanOptions => ({
   ...o,
 });
 
-// Frame-space span of the box at zoom s with the same centring the renderer uses.
-const span = (c: number, half: number, s: number) => {
-  const t = Math.max(-(s - 1) / 2, Math.min((s - 1) / 2, -s * (c - 0.5)));
-  return [0.5 + t + s * (c - half - 0.5), 0.5 + t + s * (c + half - 0.5)];
+// Frame-space span of the box at zoom s with the same centring the renderer uses: the box centre sits at
+// frame fraction `at` (subjectFramePosition) and the zoom's clamped translate pulls it toward `target`.
+const span = (at: number, half: number, s: number, target: number) => {
+  const t = Math.max(-(s - 1) / 2, Math.min((s - 1) / 2, target - 0.5 - s * (at - 0.5)));
+  return [0.5 + t + s * (at - half - 0.5), 0.5 + t + s * (at + half - 0.5)];
 };
+// object-position p on an axis with visible fraction v puts image point u at frame p(1 - 1/v) + u/v.
+const toFrame = (u: number, p: number, v: number) => p * (1 - 1 / v) + u / v;
+const pctOf = (objectPosition: string) => objectPosition.split(' ').map((t) => parseFloat(t) / 100);
 
 describe('visibleFraction', () => {
   it('a landscape photo shows a narrow vertical strip; a tall photo a horizontal band', () => {
@@ -81,9 +91,10 @@ describe('safeCropScale', () => {
       const s = safeCropScale(f, LANDSCAPE);
       if (s === null) continue;
       const { vw, vh } = visibleFraction(LANDSCAPE);
+      const p = subjectFramePosition(f, LANDSCAPE)!;
       for (const z of [s, s * MOVE_SCALE]) {
-        const [x0, x1] = span(f.x, (f.w! * BOX_PAD) / 2 / vw, z);
-        const [y0, y1] = span(f.y, (f.h! * BOX_PAD) / 2 / vh, z);
+        const [x0, x1] = span(p.x, (f.w! * BOX_PAD) / 2 / vw, z, SUBJECT_TARGET_X);
+        const [y0, y1] = span(p.y, (f.h! * BOX_PAD) / 2 / vh, z, SUBJECT_TARGET_Y);
         const m = SUBJECT_MARGIN + MOVE_SHIFT - 1e-9;
         expect(x0).toBeGreaterThanOrEqual(m);
         expect(x1).toBeLessThanOrEqual(1 - m);
@@ -101,12 +112,19 @@ describe('safeCropScale', () => {
     const s = safeCropScale(f, aspect);
     if (s === null) return; // staying wide is always safe
     const { vw } = visibleFraction(aspect);
+    const p = subjectFramePosition(f, aspect)!;
     for (const z of [s, s * MOVE_SCALE]) {
-      const t = Math.max(-(z - 1) / 2, Math.min((z - 1) / 2, -z * (f.x - 0.5)));
-      const toImg = (fx: number) => f.x + ((fx - 0.5 - t) / z + 0.5 - f.x) * vw;
+      const t = subjectTranslate(p.x, SUBJECT_TARGET_X, z);
+      // frame X -> pre-zoom frame point -> image fraction (box centre f.x sits at frame p.x)
+      const toImg = (fx: number) => f.x + ((fx - 0.5 - t) / z + 0.5 - p.x) * vw;
       expect(toImg(0)).toBeLessThanOrEqual(0.38);
       expect(toImg(1)).toBeGreaterThanOrEqual(0.59);
     }
+  });
+
+  it('an off-centre subject now gets the same crop as a centred one (it is centred first)', () => {
+    expect(safeCropScale({ x: 0.3, y: 0.4, w: 0.15, h: 0.25 }, LANDSCAPE)).toBe(safeCropScale(person, LANDSCAPE));
+    expect(safeCropScale({ x: 0.72, y: 0.4, w: 0.15, h: 0.25 }, LANDSCAPE)).toBe(safeCropScale(person, LANDSCAPE));
   });
 
   it('zooms less for a bigger subject', () => {
@@ -225,9 +243,149 @@ describe('planShots', () => {
   });
 });
 
+describe('subjectFramePosition (owner 2026-10-11: subjects centred, not at their proportional spot)', () => {
+  const W169 = 16 / 9;
+  it('a subject at x=0.22 in a landscape photo lands at the frame centre', () => {
+    const pos = subjectFramePosition({ x: 0.22, y: 0.45 }, W169)!;
+    expect(pos.x).toBeCloseTo(0.5, 9);
+    const [px] = pctOf(pos.objectPosition);
+    expect(toFrame(0.22, px, visibleFraction(W169).vw)).toBeCloseTo(0.5, 4);
+    expect(px).toBeGreaterThan(0);
+    expect(px).toBeLessThan(1);
+  });
+  it('clamps at the photo edges (x=0.02 / 0.98): object-position 0% / 100%, no edge exposed', () => {
+    const { vw } = visibleFraction(W169);
+    const l = subjectFramePosition({ x: 0.02, y: 0.5 }, W169)!;
+    const r = subjectFramePosition({ x: 0.98, y: 0.5 }, W169)!;
+    expect(pctOf(l.objectPosition)[0]).toBe(0);
+    expect(pctOf(r.objectPosition)[0]).toBe(1);
+    expect(l.x).toBeCloseTo(0.02 / vw, 9); // as far toward the centre as the photo allows
+    expect(r.x).toBeCloseTo(1 - 0.02 / vw, 9);
+    expect(l.x).toBeLessThan(0.5);
+    expect(r.x).toBeGreaterThan(0.5);
+  });
+  it('object-position is always within 0..100% (never exposes an edge)', () => {
+    for (const aspect of [0.4, 0.5625, 0.8, 1, 1.5, 16 / 9, 3]) {
+      for (const x of [0, 0.02, 0.22, 0.5, 0.77, 0.98, 1]) {
+        for (const y of [0, 0.1, 0.42, 0.9, 1]) {
+          const [px, py] = pctOf(subjectFramePosition({ x, y }, aspect)!.objectPosition);
+          expect(px).toBeGreaterThanOrEqual(0);
+          expect(px).toBeLessThanOrEqual(1);
+          expect(py).toBeGreaterThanOrEqual(0);
+          expect(py).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+  it('vertically places the box centre ~42% down on a tall photo, clamped at the top', () => {
+    const tall = 0.4; // visible band vh = 0.4 / 0.5625
+    const { vh } = visibleFraction(tall);
+    const pos = subjectFramePosition({ x: 0.5, y: 0.35 }, tall)!;
+    expect(pos.y).toBeCloseTo(SUBJECT_TARGET_Y, 9);
+    expect(SUBJECT_TARGET_Y).toBeCloseTo(0.42);
+    expect(toFrame(0.35, pctOf(pos.objectPosition)[1], vh)).toBeCloseTo(0.42, 4);
+    const top = subjectFramePosition({ x: 0.5, y: 0.05 }, tall)!;
+    expect(pctOf(top.objectPosition)[1]).toBe(0);
+    expect(top.y).toBeCloseTo(0.05 / vh, 9);
+  });
+  it('an axis that is fully visible is unaffected (landscape y, portrait x)', () => {
+    expect(subjectFramePosition({ x: 0.3, y: 0.22 }, W169)!.y).toBe(0.22);
+    expect(subjectFramePosition({ x: 0.3, y: 0.22 }, 0.4)!.x).toBe(0.3);
+    expect(subjectFramePosition({ x: 0.3, y: 0.22 }, FRAME_ASPECT)).toEqual({ x: 0.3, y: 0.22, objectPosition: '30.00% 22.00%' });
+  });
+  it('no focal: null; unknown photo size: the old proportional placement', () => {
+    expect(subjectFramePosition(null, W169)).toBeNull();
+    expect(subjectFramePosition({ x: 0.22, y: 0.45 }, null)).toEqual({ x: 0.22, y: 0.45, objectPosition: '22.00% 45.00%' });
+  });
+});
+
+describe('wideMoveBudget (owner 2026-10-11: wide moves must not push the subject out)', () => {
+  it('photos without a box keep the full dramatic wide move', () => {
+    expect(wideMoveBudget(null, LANDSCAPE)).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
+    expect(wideMoveBudget({ x: 0.5, y: 0.4 }, LANDSCAPE)).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
+  });
+  it('a small, centred box keeps the full wide move', () => {
+    expect(wideMoveBudget(person, LANDSCAPE)).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
+  });
+  it('a bigger box gets a reduced move, never below the tight move', () => {
+    const b = wideMoveBudget({ x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, LANDSCAPE);
+    expect(b.moveScale).toBeLessThan(WIDE_MOVE_SCALE);
+    expect(b.moveScale).toBeGreaterThanOrEqual(MOVE_SCALE);
+    expect(b.moveShift).toBeLessThan(WIDE_MOVE_SHIFT);
+    expect(b.moveShift).toBeGreaterThanOrEqual(MOVE_SHIFT);
+  });
+  it('a box that can never fit (real beat 6: w 0.52 on 16:9) gets the tight scale and zero drift', () => {
+    expect(wideMoveBudget({ x: 0.48, y: 0.36, w: 0.52, h: 0.55 }, 3382 / 1902)).toEqual({ moveScale: MOVE_SCALE, moveShift: 0 });
+  });
+  it('the chosen budget keeps the padded box inside the margins over the whole hold', () => {
+    for (const f of [{ x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, { x: 0.3, y: 0.3, w: 0.18, h: 0.4 }, { x: 0.6, y: 0.5, w: 0.22, h: 0.35 }]) {
+      const b = wideMoveBudget(f, LANDSCAPE);
+      if (b.moveShift === 0) continue;
+      const { vw, vh } = visibleFraction(LANDSCAPE);
+      const p = subjectFramePosition(f, LANDSCAPE)!;
+      const m = SUBJECT_MARGIN + b.moveShift - 1e-9;
+      for (const z of [WIDE_SCALE, WIDE_SCALE * b.moveScale]) {
+        const [x0, x1] = span(p.x, (f.w * BOX_PAD) / 2 / vw, z, SUBJECT_TARGET_X);
+        const [y0, y1] = span(p.y, (f.h * BOX_PAD) / 2 / vh, z, SUBJECT_TARGET_Y);
+        expect(x0).toBeGreaterThanOrEqual(m);
+        expect(x1).toBeLessThanOrEqual(1 - m);
+        expect(y0).toBeGreaterThanOrEqual(m);
+        expect(y1).toBeLessThanOrEqual(1 - m);
+      }
+    }
+  });
+  it('letterboxed / small-card photos (whole photo shown) keep the full wide move', () => {
+    expect(wideMoveBudget(lineup, LANDSCAPE, 'letterbox')).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
+    expect(wideMoveBudget(person, LANDSCAPE, 'small')).toEqual({ moveScale: WIDE_MOVE_SCALE, moveShift: WIDE_MOVE_SHIFT });
+  });
+  it('a box on a photo of unknown size gets the tight move (cannot be checked)', () => {
+    expect(wideMoveBudget(person, null)).toEqual({ moveScale: MOVE_SCALE, moveShift: MOVE_SHIFT });
+  });
+  it('planShots: wide shots use the budget, tight shots keep MOVE_SCALE / MOVE_SHIFT', () => {
+    const big = { x: 0.5, y: 0.45, w: 0.2, h: 0.35 };
+    const b = wideMoveBudget(big, LANDSCAPE);
+    planShots(528, FPS, opts({ focal: big })).forEach((s) => {
+      if (s.scale === WIDE_SCALE) expect({ moveScale: s.moveScale, moveShift: s.moveShift }).toEqual(b);
+      else expect({ moveScale: s.moveScale, moveShift: s.moveShift }).toEqual({ moveScale: MOVE_SCALE, moveShift: MOVE_SHIFT });
+    });
+  });
+  it('planShots: a zero-drift budget turns drifts / rises into push / pull, never the same move twice', () => {
+    const loose = { x: 0.48, y: 0.36, w: 0.52, h: 0.55 };
+    for (let seed = 0; seed <= 20; seed++) {
+      const shots = planShots(528, FPS, opts({ focal: loose, aspect: 3382 / 1902, seed }));
+      shots.forEach((s) => expect(['pushIn', 'pullOut']).toContain(s.move));
+      for (let i = 1; i < shots.length; i++) expect(shots[i].move).not.toBe(shots[i - 1].move);
+    }
+  });
+});
+
+describe('real AVS-mv3zrl17 beats (owner 2026-10-11)', () => {
+  it('beat 4 (p3, 768x432, Norris + Piastri circle): box centred, both faces inside the visible strip', () => {
+    const f = { x: 0.22, y: 0.45, w: 0.38, h: 0.75 };
+    const aspect = 768 / 432;
+    const pos = subjectFramePosition(f, aspect)!;
+    expect(pos.x).toBeCloseTo(0.5, 6);
+    const { vw } = visibleFraction(aspect);
+    const b = wideMoveBudget(f, aspect);
+    // Visible image window at the largest steady zoom of the wide shot (centred on the box).
+    const z = WIDE_SCALE * b.moveScale;
+    const left = f.x - vw / (2 * z);
+    const right = f.x + vw / (2 * z);
+    // Piastri's face ~0.09-0.19, Norris's ~0.27-0.34 of the photo width (boxes.jpg).
+    expect(left).toBeLessThan(0.09);
+    expect(right).toBeGreaterThan(0.34);
+  });
+  it('beat 5 (p4) stays centred on its box', () => {
+    expect(subjectFramePosition({ x: 0.48, y: 0.32, w: 0.52, h: 0.48 }, 1600 / 900)!.x).toBeCloseTo(0.5, 6);
+  });
+});
+
 describe('focalObjectPosition', () => {
-  it('maps focal to object-position percentages', () => {
+  it('without the photo size: maps focal to object-position percentages (old placement)', () => {
     expect(focalObjectPosition({ x: 0.25, y: 0.4 })).toBe('25.00% 40.00%');
+  });
+  it('with the photo size: the centring object-position', () => {
+    expect(focalObjectPosition({ x: 0.22, y: 0.45 }, 16 / 9)).toBe(subjectFramePosition({ x: 0.22, y: 0.45 }, 16 / 9)!.objectPosition);
   });
   it('falls back to the existing centre-top framing', () => {
     expect(focalObjectPosition(null)).toBe('center top');

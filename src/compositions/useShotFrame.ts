@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Focal } from '../types/beat';
 import { framesForBeat } from '../lib/duration';
-import { focalObjectPosition, photoLayout, planShots, smallPhotoSize, type PhotoLayout } from '../lib/shots';
+import { photoLayout, planShots, smallPhotoSize, subjectFramePosition, type PhotoLayout } from '../lib/shots';
 import { shotFrameAt, type ShotFrame } from '../lib/shotMotion';
 
 export type ShotMotionOptions = { seed: number; slamIn: boolean; whiskOut: boolean; sweepIn?: boolean; sweepOut?: boolean };
@@ -19,11 +19,13 @@ export const useShotFrame = (
   const { seed, slamIn, whiskOut, sweepIn = false, sweepOut = false } = motion;
   const focal = beat.focal ?? null;
   const aspect = beat.photo_w && beat.photo_h ? beat.photo_w / beat.photo_h : null;
-  const shots = useMemo(
-    () => planShots(durationInFrames, fps, { focal, aspect, seed, slamIn, whiskOut, sweepIn, sweepOut }),
-    [durationInFrames, fps, focal, aspect, seed, slamIn, whiskOut, sweepIn, sweepOut],
-  );
   const layout = photoLayout(focal, aspect, beat.photo_w, beat.photo_h);
+  const shots = useMemo(
+    () => planShots(durationInFrames, fps, { focal, aspect, layout, seed, slamIn, whiskOut, sweepIn, sweepOut }),
+    [durationInFrames, fps, focal, aspect, layout, seed, slamIn, whiskOut, sweepIn, sweepOut],
+  );
   const smallSize = layout === 'small' && beat.photo_w && beat.photo_h ? smallPhotoSize(beat.photo_w, beat.photo_h) : null;
-  return { shot: shotFrameAt(shots, frame, focal), objectPosition: focalObjectPosition(focal), layout, smallSize };
+  // Subject box centre in frame space (centred by the object-position); the shot motion centres on it.
+  const subject = subjectFramePosition(focal, aspect);
+  return { shot: shotFrameAt(shots, frame, subject), objectPosition: subject?.objectPosition ?? 'center top', layout, smallSize };
 };

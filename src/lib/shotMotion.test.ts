@@ -1,13 +1,42 @@
 import { describe, it, expect } from 'vitest';
-import { HOLD_MOVES, MOVE_SCALE, MOVE_SHIFT, WIDE_MOVE_SCALE, WIDE_MOVE_SHIFT, planShots, type PlanOptions } from './shots';
-import { SHAKE_FRAMES, SLAM_FRAMES, SWEEP_IN_FRAMES, SWEEP_OUT_FRAMES, WHISK_FRAMES, holdMove, shotFrameAt } from './shotMotion';
+import {
+  BOX_PAD,
+  HOLD_MOVES,
+  MOVE_SCALE,
+  MOVE_SHIFT,
+  SUBJECT_MARGIN,
+  SUBJECT_TARGET_X,
+  SUBJECT_TARGET_Y,
+  WIDE_MOVE_SCALE,
+  WIDE_MOVE_SHIFT,
+  planShots,
+  subjectFramePosition,
+  visibleFraction,
+  type PlanOptions,
+} from './shots';
+import {
+  CRASH_FRAMES,
+  CRASH_OUT_FRAMES,
+  PUNCH_FRAMES,
+  SHAKE_FRAMES,
+  SLAM_FRAMES,
+  SWEEP_IN_FRAMES,
+  SWEEP_OUT_FRAMES,
+  WHIP_FRAMES,
+  WHISK_FRAMES,
+  holdMove,
+  shotFrameAt,
+} from './shotMotion';
 import { WIPE_HALF_FRAMES } from './transitions';
 import type { Focal } from '../types/beat';
 
 const FPS = 30;
 const person: Focal = { x: 0.5, y: 0.4, w: 0.15, h: 0.25 };
+const ASPECT = 1.5;
 const plan = (d: number, o: Partial<PlanOptions> = {}) =>
-  planShots(d, FPS, { focal: person, aspect: 1.5, seed: 0, slamIn: true, whiskOut: true, ...o });
+  planShots(d, FPS, { focal: person, aspect: ASPECT, seed: 0, slamIn: true, whiskOut: true, ...o });
+// shotFrameAt takes the subject centre in FRAME space, as the renderer places it (useShotFrame).
+const at = (f: Focal | null, aspect = ASPECT) => subjectFramePosition(f, aspect);
 
 describe('shotFrameAt edge safety', () => {
   const focals: (Focal | null)[] = [
@@ -25,7 +54,7 @@ describe('shotFrameAt edge safety', () => {
         for (const [d, sweep] of [[30, false], [282, false], [420, false], [528, false], [528, true], [300, true], [30, true]] as const) {
           const shots = plan(d, { focal, seed, sweepIn: sweep, sweepOut: sweep });
           for (let f = 0; f < d; f++) {
-            const s = shotFrameAt(shots, f, focal);
+            const s = shotFrameAt(shots, f, at(focal));
             const limit = (s.scale - 1) * 50 + 1e-9;
             if (s.scale < 1 || Math.abs(s.txPct) > limit || Math.abs(s.tyPct) > limit) {
               violations.push(JSON.stringify({ focal, seed, d, f, s }));
@@ -43,7 +72,7 @@ describe('poster frame', () => {
     for (let seed = 0; seed <= 10; seed++) {
       for (const focal of [null, person]) {
         const shots = plan(330, { slamIn: false, focal, seed });
-        const s = shotFrameAt(shots, 0, focal);
+        const s = shotFrameAt(shots, 0, at(focal));
         expect(s.blurX + s.blurY).toBe(0);
         expect(shots[0].scale).toBeLessThan(1.05); // wide, not a crop
       }
@@ -54,18 +83,18 @@ describe('poster frame', () => {
 describe('slam', () => {
   const shots = plan(420);
   it('starts oversized and blurred', () => {
-    const s = shotFrameAt(shots, 0, person);
+    const s = shotFrameAt(shots, 0, at(person));
     expect(s.scale).toBeGreaterThanOrEqual(shots[0].scale * 1.2);
     expect(s.blurY).toBeGreaterThan(0);
   });
   it('has landed and is sharp after slam + shake', () => {
-    const s = shotFrameAt(shots, SLAM_FRAMES + SHAKE_FRAMES, person);
+    const s = shotFrameAt(shots, SLAM_FRAMES + SHAKE_FRAMES, at(person));
     expect(s.scale / shots[0].scale).toBeLessThan(WIDE_MOVE_SCALE + 0.02);
     expect(s.blurX + s.blurY).toBe(0);
   });
   it('is skipped when slamIn is false', () => {
     const noSlam = plan(420, { slamIn: false });
-    const s = shotFrameAt(noSlam, 0, person);
+    const s = shotFrameAt(noSlam, 0, at(person));
     expect(s.scale).toBeLessThanOrEqual(noSlam[0].scale * WIDE_MOVE_SCALE + 1e-9);
     expect(s.blurX + s.blurY).toBe(0);
   });
@@ -82,17 +111,17 @@ describe('inner cuts', () => {
 
   it('hard punch pops the first frame of the shot', () => {
     const shots = withEntry('hardPunch');
-    const pop = shotFrameAt(shots, shots[1].from, person).scale;
-    const later = shotFrameAt(shots, shots[1].from + 3, person).scale;
+    const pop = shotFrameAt(shots, shots[1].from, at(person)).scale;
+    const later = shotFrameAt(shots, shots[1].from + 3, at(person)).scale;
     expect(pop).toBeGreaterThan(later * 1.015);
   });
 
   it('whip blurs both sides of the cut, not mid-shot', () => {
     const shots = withEntry('whip');
-    expect(shotFrameAt(shots, shots[1].from - 1, person).blurX).toBeGreaterThan(0);
-    expect(shotFrameAt(shots, shots[1].from, person).blurX).toBeGreaterThan(0);
+    expect(shotFrameAt(shots, shots[1].from - 1, at(person)).blurX).toBeGreaterThan(0);
+    expect(shotFrameAt(shots, shots[1].from, at(person)).blurX).toBeGreaterThan(0);
     const mid = shots[1].from + Math.floor(shots[1].durationInFrames / 2);
-    expect(shotFrameAt(shots, mid, person).blurX).toBe(0);
+    expect(shotFrameAt(shots, mid, at(person)).blurX).toBe(0);
   });
 });
 
@@ -100,12 +129,12 @@ describe('whisk', () => {
   it('zooms through with blur on the last frame', () => {
     const shots = plan(420);
     const last = shots[shots.length - 1];
-    const s = shotFrameAt(shots, 419, person);
+    const s = shotFrameAt(shots, 419, at(person));
     expect(s.scale).toBeGreaterThanOrEqual(last.scale * 1.2);
     expect(s.blurY).toBeGreaterThan(0);
   });
   it('is skipped when whiskOut is false', () => {
-    const s = shotFrameAt(plan(420, { whiskOut: false }), 419, person);
+    const s = shotFrameAt(plan(420, { whiskOut: false }), 419, at(person));
     expect(s.blurX + s.blurY).toBe(0);
   });
 });
@@ -151,18 +180,37 @@ describe('hold moves', () => {
 });
 
 describe('framing', () => {
-  it('pulls toward the subject on the tight shot', () => {
+  // Frame-space centre of the subject box for one rendered frame.
+  const centreAt = (s: { scale: number; txPct: number; tyPct: number }, p: { x: number; y: number }) => ({
+    x: 0.5 + s.txPct / 100 + s.scale * (p.x - 0.5),
+    y: 0.5 + s.tyPct / 100 + s.scale * (p.y - 0.5),
+  });
+  it('an off-centre subject sits at the frame centre (x) and ~42% down on the tight shot (owner 2026-10-11)', () => {
     const right: Focal = { x: 0.65, y: 0.4, w: 0.15, h: 0.25 };
     const left: Focal = { x: 0.35, y: 0.4, w: 0.15, h: 0.25 };
-    const r = plan(420, { focal: right });
-    const l = plan(420, { focal: left });
-    const mid = r[1].from + Math.floor(r[1].durationInFrames / 2);
-    expect(shotFrameAt(r, mid, right).txPct).toBeLessThan(0);
-    expect(shotFrameAt(l, mid, left).txPct).toBeGreaterThan(0);
+    for (const f of [right, left]) {
+      const shots = plan(420, { focal: f, slamIn: false });
+      expect(shots[1].scale).toBeGreaterThan(1.1); // the tight crop
+      const p = at(f)!;
+      for (const k of [10, Math.floor(shots[1].durationInFrames / 2), shots[1].durationInFrames - 10]) {
+        const c = centreAt(shotFrameAt(shots, shots[1].from + k, p), p);
+        expect(Math.abs(c.x - SUBJECT_TARGET_X)).toBeLessThanOrEqual(MOVE_SHIFT + 1e-9); // only the budgeted drift
+      }
+    }
+  });
+  it('pulls an edge subject (clamped object-position) toward the centre on the tight shot', () => {
+    // A tall photo: the subject's object-position clamps, so the zoom's translate does the rest.
+    const f: Focal = { x: 0.5, y: 0.06, w: 0.1, h: 0.08 };
+    const aspect = 0.4;
+    const p = at(f, aspect)!;
+    expect(p.y).toBeLessThan(SUBJECT_TARGET_Y);
+    const shots = plan(420, { focal: f, aspect, slamIn: false });
+    const mid = shots[1].from + Math.floor(shots[1].durationInFrames / 2);
+    expect(shotFrameAt(shots, mid, p).tyPct).toBeGreaterThan(0);
   });
   it('is deterministic', () => {
     const shots = plan(420, { seed: 3 });
-    expect(shotFrameAt(shots, 100, person)).toEqual(shotFrameAt(shots, 100, person));
+    expect(shotFrameAt(shots, 100, at(person))).toEqual(shotFrameAt(shots, 100, at(person)));
   });
   it('the hold never pushes past the whisk window', () => {
     const shots = plan(330, { focal: null });
@@ -174,12 +222,12 @@ describe('framing', () => {
 describe('lime-wipe sweep (owner 2026-10-08)', () => {
   const shots = plan(528, { sweepIn: true, sweepOut: true });
   it('enters already moving right (with the wipe), blurred, and is sharp once settled', () => {
-    const a = shotFrameAt(shots, 0, person);
-    const b = shotFrameAt(shots, 4, person);
+    const a = shotFrameAt(shots, 0, at(person));
+    const b = shotFrameAt(shots, 4, at(person));
     expect(b.txPct).toBeGreaterThan(a.txPct);
     expect(a.blurX).toBeGreaterThan(0);
     expect(a.blurY).toBe(0); // no slam
-    const settled = shotFrameAt(shots, SWEEP_IN_FRAMES, person);
+    const settled = shotFrameAt(shots, SWEEP_IN_FRAMES, at(person));
     expect(settled.blurX + settled.blurY).toBe(0);
   });
   it('settles only after the wipe has cleared the frame', () => {
@@ -192,8 +240,8 @@ describe('lime-wipe sweep (owner 2026-10-08)', () => {
     expect(hold1).not.toEqual(hold0);
   });
   it('the outgoing photo is shoved right under the wipe, never whisked', () => {
-    const before = shotFrameAt(shots, 528 - SWEEP_OUT_FRAMES - 1, person);
-    const last = shotFrameAt(shots, 527, person);
+    const before = shotFrameAt(shots, 528 - SWEEP_OUT_FRAMES - 1, at(person));
+    const last = shotFrameAt(shots, 527, at(person));
     expect(last.txPct).toBeGreaterThan(before.txPct);
     expect(last.blurX).toBeGreaterThan(0);
     expect(last.blurY).toBe(0);
@@ -212,15 +260,76 @@ describe('random inner cuts', () => {
   };
   it('vertical whip blurs vertically on both sides of the cut', () => {
     const { shots, i } = find('whipUp');
-    expect(shotFrameAt(shots, shots[i].from - 1, person).blurY).toBeGreaterThan(0);
-    expect(shotFrameAt(shots, shots[i].from, person).blurY).toBeGreaterThan(0);
+    expect(shotFrameAt(shots, shots[i].from - 1, at(person)).blurY).toBeGreaterThan(0);
+    expect(shotFrameAt(shots, shots[i].from, at(person)).blurY).toBeGreaterThan(0);
   });
   it('crash zoom lands oversized and blurred, then is sharp', () => {
     const { shots, i } = find('crashZoom');
-    const a = shotFrameAt(shots, shots[i].from, person);
-    const b = shotFrameAt(shots, shots[i].from + 8, person);
+    const a = shotFrameAt(shots, shots[i].from, at(person));
+    const b = shotFrameAt(shots, shots[i].from + 8, at(person));
     expect(a.scale).toBeGreaterThan(b.scale * 1.15);
     expect(a.blurX).toBeGreaterThan(0);
     expect(b.blurX + b.blurY).toBe(0);
+  });
+});
+
+describe('subject safety in the steady state (owner 2026-10-11)', () => {
+  // Frames inside an entry / exit transient (slam, shake, whip, crash, punch, sweep, whisk) are short;
+  // every OTHER frame must keep the padded subject box inside the frame margins.
+  const ENTRY: Record<string, number> = {
+    none: 0,
+    slam: SLAM_FRAMES + SHAKE_FRAMES,
+    sweep: SWEEP_IN_FRAMES,
+    hardPunch: PUNCH_FRAMES,
+    whip: WHIP_FRAMES,
+    whipUp: WHIP_FRAMES,
+    crashZoom: CRASH_FRAMES,
+  };
+  const EXIT = Math.max(WHIP_FRAMES, CRASH_OUT_FRAMES, SWEEP_OUT_FRAMES, WHISK_FRAMES);
+  const cases: [string, Focal, number][] = [
+    ['person 3:2', person, 1.5],
+    ['left of centre', { x: 0.3, y: 0.35, w: 0.12, h: 0.3 }, 1.5],
+    ['near the right edge', { x: 0.85, y: 0.4, w: 0.1, h: 0.2 }, 1.5],
+    ['high head, 16:9', { x: 0.62, y: 0.3, w: 0.12, h: 0.22 }, 16 / 9],
+    ['portrait photo', { x: 0.5, y: 0.25, w: 0.3, h: 0.2 }, 0.75],
+    ['bigger box, reduced wide move', { x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, 1.5],
+    ['bigger box off-centre, reduced wide move', { x: 0.6, y: 0.5, w: 0.22, h: 0.35 }, 1.5],
+  ];
+  it.each(cases)('%s: padded box stays in frame on every steady frame', (_n, f, aspect) => {
+    const p = at(f, aspect)!;
+    const { vw, vh } = visibleFraction(aspect);
+    const halfW = (f.w! * BOX_PAD) / 2 / vw;
+    const halfH = (f.h! * BOX_PAD) / 2 / vh;
+    const bad: string[] = [];
+    for (let seed = 0; seed <= 8; seed++) {
+      for (const [d, sweep] of [[300, false], [420, true], [528, false], [528, true]] as const) {
+        const shots = plan(d, { focal: f, aspect, seed, sweepIn: sweep, sweepOut: sweep });
+        for (const shot of shots) {
+          for (let k = ENTRY[shot.entry]; k < shot.durationInFrames - EXIT; k++) {
+            const s = shotFrameAt(shots, shot.from + k, p);
+            const x0 = 0.5 + s.txPct / 100 + s.scale * (p.x - halfW - 0.5);
+            const x1 = 0.5 + s.txPct / 100 + s.scale * (p.x + halfW - 0.5);
+            const y0 = 0.5 + s.tyPct / 100 + s.scale * (p.y - halfH - 0.5);
+            const y1 = 0.5 + s.tyPct / 100 + s.scale * (p.y + halfH - 0.5);
+            const m = SUBJECT_MARGIN - 1e-6;
+            if (x0 < m || x1 > 1 - m || y0 < m || y1 > 1 - m) bad.push(`${seed}/${d}/${shot.from + k}`);
+          }
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+  it('transients settle: after its entry the frame is exactly the hold move (nothing left over)', () => {
+    for (let seed = 0; seed <= 8; seed++) {
+      const focal: Focal = { x: 0.3, y: 0.35, w: 0.12, h: 0.3 };
+      const shots = plan(528, { seed, focal });
+      for (const shot of shots.slice(1)) {
+        const k = ENTRY[shot.entry];
+        const s = shotFrameAt(shots, shot.from + k, at(focal));
+        expect(s.blurX + s.blurY).toBe(0);
+        const hold = holdMove(shot.move, k / (shot.durationInFrames - 1), shot.moveScale, shot.moveShift);
+        expect(s.scale).toBeCloseTo(Math.max(1, shot.scale * hold.m), 9);
+      }
+    }
   });
 });
