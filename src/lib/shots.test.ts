@@ -329,9 +329,9 @@ describe('wideMoveBudget (owner 2026-10-11 round 2: protect the face core, keep 
   // 13a tight head boxes for the real AVS-mv3zrl17 photos (brief 2026-10-11 round 2).
   it.each([
     ['beat 2 (p1, Stella)', { x: 0.647, y: 0.231, w: 0.233, h: 0.451 }, 1200 / 799, { moveScale: 1.2, driftScale: 1.2, moveShift: 0.08, axes: 'x' }],
-    ['beat 4 (p3, Norris + Piastri)', { x: 0.2, y: 0.278, w: 0.221, h: 0.268 }, 768 / 432, { moveScale: 1.2, driftScale: 1.2, moveShift: 0.08, axes: 'x' }],
+    ['beat 4 (p3, Norris + Piastri)', { x: 0.2, y: 0.278, w: 0.221, h: 0.268 }, 768 / 432, { moveScale: 1.2, driftScale: 1.17, moveShift: 0.065, axes: 'x' }],
     ['beat 5 (p4, Stella presser)', { x: 0.525, y: 0.371, w: 0.237, h: 0.653 }, 1600 / 900, { moveScale: 1.2, driftScale: 1.2, moveShift: 0.08, axes: 'x' }],
-    ['beat 6 (p5, Piastri)', { x: 0.636, y: 0.429, w: 0.322, h: 0.784 }, 3382 / 1902, { moveScale: 1.2, driftScale: 1.14, moveShift: 0.05, axes: 'xy' }],
+    ['beat 6 (p5, Piastri)', { x: 0.636, y: 0.429, w: 0.322, h: 0.784 }, 3382 / 1902, { moveScale: 1.2, driftScale: 1.14, moveShift: 0.05, axes: 'y' }],
   ] as const)('real %s gets at least the 1.12 floor: %j', (_n, f, aspect, want) => {
     const b = wideMoveBudget(f, aspect);
     expect(b).toEqual({ ...want, pullOnly: false });
@@ -374,15 +374,25 @@ describe('wideMoveBudget (owner 2026-10-11 round 2: protect the face core, keep 
     expect(n).toBe(3000);
   });
 
-  it('the face core trims 30% of one head: a single head box loses 30% of its width, a group only one head\'s 30%', () => {
+  it('the face core: a single head loses 30% of its width; the trim fades out for a group of heads', () => {
     const { vw } = visibleFraction(1200 / 799);
     const single = faceCore({ x: 0.647, y: 0.231, w: 0.233, h: 0.451 }, 1200 / 799)!;
     expect(single.halfW * 2 * vw).toBeCloseTo(0.233 * CORE_W, 9);
     expect(single.halfH * 2).toBeCloseTo(0.451 * CORE_H, 9);
     const aspect = 768 / 432;
-    const group = faceCore({ x: 0.2, y: 0.278, w: 0.221, h: 0.268 }, aspect)!;
     const headW = (HEAD_W_PER_H * 0.268) / aspect; // one head, in image-width units
-    expect(group.halfW * 2 * visibleFraction(aspect).vw).toBeCloseTo(0.221 - (1 - CORE_W) * headW, 9);
+    const coreW = (f: Focal) => faceCore(f, aspect)!.halfW * 2 * visibleFraction(aspect).vw;
+    // Real beat 4: ~1.8 heads wide -> only a sliver is trimmed.
+    expect(coreW({ x: 0.2, y: 0.278, w: 0.221, h: 0.268 })).toBeCloseTo(0.221 - (1 - CORE_W) * headW * (2 - 0.221 / headW), 9);
+    expect(coreW({ x: 0.2, y: 0.278, w: headW, h: 0.268 })).toBeCloseTo(headW * CORE_W, 9); // exactly one head
+    expect(coreW({ x: 0.3, y: 0.278, w: 2.5 * headW, h: 0.268 })).toBeCloseTo(2.5 * headW, 9); // a line of heads: whole box
+    // Continuous: widening the box never shrinks the core.
+    let last = 0;
+    for (let w = 0.02; w <= 0.5; w += 0.005) {
+      const c = coreW({ x: 0.5, y: 0.4, w, h: 0.268 });
+      expect(c).toBeGreaterThanOrEqual(last - 1e-12);
+      last = c;
+    }
     expect(faceCore(person, null)).toBeNull();
     expect(faceCore({ x: 0.5, y: 0.5 }, LANDSCAPE)).toBeNull();
   });
@@ -433,8 +443,8 @@ describe('wideMoveBudget (owner 2026-10-11 round 2: protect the face core, keep 
   });
 
   it('planShots: a zero-drift budget alternates push / pull', () => {
-    // A big face high in a 3:2 photo: the push fits, no drift does (sideways too wide, vertically clamped).
-    const big = { x: 0.3, y: 0.3, w: 0.34, h: 0.35 };
+    // A big subject high in a 3:2 photo: the push fits, no drift does (sideways too wide, vertically clamped).
+    const big = { x: 0.3, y: 0.3, w: 0.32, h: 0.4 };
     expect(wideMoveBudget(big, LANDSCAPE)).toEqual({ moveScale: 1.2, driftScale: 1.2, moveShift: 0, axes: 'none', pullOnly: false });
     for (let seed = 0; seed <= 20; seed++) {
       const shots = planShots(528, FPS, opts({ focal: big, seed }));

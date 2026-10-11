@@ -314,7 +314,7 @@ describe('subject safety in the steady state (owner 2026-10-11, round 2: face co
     ['portrait photo', { x: 0.5, y: 0.25, w: 0.3, h: 0.2 }, 0.75],
     ['bigger box', { x: 0.5, y: 0.45, w: 0.2, h: 0.35 }, 1.5],
     ['bigger box off-centre', { x: 0.6, y: 0.5, w: 0.22, h: 0.35 }, 1.5],
-    ['big face, push / pull only', { x: 0.3, y: 0.3, w: 0.34, h: 0.35 }, 1.5],
+    ['big subject, push / pull only', { x: 0.3, y: 0.3, w: 0.32, h: 0.4 }, 1.5],
     ['real beat 2 (p1)', { x: 0.647, y: 0.231, w: 0.233, h: 0.451 }, 1200 / 799],
     ['real beat 4 (p3, two faces)', { x: 0.2, y: 0.278, w: 0.221, h: 0.268 }, 768 / 432],
     ['real beat 5 (p4)', { x: 0.525, y: 0.371, w: 0.237, h: 0.653 }, 1600 / 900],

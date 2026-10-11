@@ -187,12 +187,13 @@ export const safeCropScale = (focal: Focal | null | undefined, aspect: number | 
 // only the face CORE -- the head box shrunk around its centre (eyes / nose / mouth) -- with a small margin;
 // ears and hair edges may leave the frame briefly during a move. Tight (cropped) shots keep the padded-box
 // rule above (safeCropScale, BOX_PAD, SUBJECT_MARGIN) unchanged.
-export const CORE_W = 0.7; // core width as a fraction of ONE head's width (see faceCore)
+export const CORE_W = 0.7; // core width as a fraction of the head width (one head; see faceCore for groups)
 export const CORE_H = 0.75; // core height as a fraction of the box height
 export const CORE_MARGIN = 0.02; // keep the core at least this far inside the frame edges
 // A single head is taller than wide (real 13a head boxes: 0.64-0.78 px width / height). A box wider than
-// HEAD_W_PER_H x its height holds several heads side by side; its core is trimmed by one head's worth of
-// width, not 30% of the whole group, so the outer faces are protected too.
+// HEAD_W_PER_H x its height holds several heads side by side, and its outer faces sit right on the box
+// edges -- 13a undershoots them (real beat 4: the box edge runs through Norris's nose). So the width trim
+// fades out as the box widens past one head, reaching zero at two heads wide: a group's whole box is kept.
 export const HEAD_W_PER_H = 0.8;
 // The motion floor: every wide shot visibly moves at least this much (a 12% push / pull, or a drift of
 // 4% of the frame each way at a 12% zoom).
@@ -230,9 +231,10 @@ export type FaceCore = { pos: SubjectPosition; halfW: number; halfH: number };
 export const faceCore = (focal: Focal | null | undefined, aspect: number | null | undefined): FaceCore | null => {
   if (!focal || focal.w === undefined || focal.h === undefined || !aspect || !(aspect > 0)) return null;
   const { vw, vh } = visibleFraction(aspect);
-  // One head's width in image-width units (box height in px x HEAD_W_PER_H), capped at the box width.
-  const headW = Math.min(focal.w, (HEAD_W_PER_H * focal.h) / aspect);
-  const coreW = focal.w - (1 - CORE_W) * headW;
+  // One head's width in image-width units (box height in px x HEAD_W_PER_H).
+  const headW = (HEAD_W_PER_H * focal.h) / aspect;
+  const trim = focal.w <= headW ? focal.w : headW * clamp(2 - focal.w / headW, 0, 1);
+  const coreW = focal.w - (1 - CORE_W) * trim;
   return { pos: subjectFramePosition(focal, aspect)!, halfW: coreW / 2 / vw, halfH: (focal.h * CORE_H) / 2 / vh };
 };
 
@@ -272,7 +274,7 @@ const ladder = (i: number, top: number, floor: number) =>
  * - push / pull: the largest zoom from 1.20 down to WIDE_FLOOR_SCALE that keeps the core in; if even the
  *   floor breaks it, pull out only (start at the floor zoom, end wide) -- never a frozen shot;
  * - drift: the largest step from 1.20 / 0.08 down to WIDE_FLOOR_SCALE / WIDE_FLOOR_SHIFT at which a drift
- *   fits on some axis, and the axes it fits on (a boxed landscape photo usually has room only vertically);
+ *   fits on some axis, and the axes it fits on (a reduced drift on a landscape photo goes vertical only);
  *   none fits: push / pull only.
  * A box on a photo of unknown size cannot be checked: the floor move.
  */
@@ -297,8 +299,11 @@ export const wideMoveBudget = (
   for (let i = 0; i <= WIDE_BUDGET_STEPS; i++) {
     const s = ladder(i, WIDE_MOVE_SCALE, WIDE_FLOOR_SCALE);
     const shift = ladder(i, WIDE_MOVE_SHIFT, WIDE_FLOOR_SHIFT);
-    const x = driftFits(c, s, shift, 'x');
     const y = driftFits(c, s, shift, 'y');
+    // Brief item 3: on a landscape photo the sideways room is the tight one (the visible strip is narrow,
+    // and a box that is a little off the face eats into it), so once the drift has had to be reduced,
+    // a photo that can drift vertically drifts vertically only.
+    const x = driftFits(c, s, shift, 'x') && !(y && i > 0 && aspect! > FRAME_ASPECT);
     if (x || y) return { moveScale, driftScale: s, moveShift: shift, axes: x && y ? 'xy' : x ? 'x' : 'y', pullOnly };
   }
   return { moveScale, driftScale: moveScale, moveShift: 0, axes: 'none', pullOnly };
