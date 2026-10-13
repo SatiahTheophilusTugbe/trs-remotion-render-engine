@@ -31,6 +31,12 @@ import {
   CORE_H,
   HEAD_W_PER_H,
   ALL_HOLD_MOVES,
+  CORE_MARGIN,
+  GROUP_PAN_ASPECT,
+  PAN_SCALE,
+  boxPixelAspect,
+  groupPan,
+  withObjectX,
   type MoveBudget,
   planShots,
   safeCropScale,
@@ -352,16 +358,24 @@ describe('wideMoveBudget (owner 2026-10-11 round 2: protect the face core, keep 
     expect(b.moveScale).toBeGreaterThanOrEqual(WIDE_FLOOR_SCALE);
   });
 
-  it('round-4 wide group box (beat 4, wider than the 9:16 strip): pull-out at the floor on every shot, never frozen', () => {
+  it('round-4 wide group box (beat 4, wider than the 9:16 strip): its budget is still the pull-out floor, but its shots pan instead (2026-10-12)', () => {
     const f = { x: 0.201, y: 0.31, w: 0.39, h: 0.456 };
     const aspect = 768 / 432;
     expect(photoLayout(f, aspect)).toBe('cover');
     expect(wideMoveBudget(f, aspect)).toEqual({ moveScale: WIDE_FLOOR_SCALE, driftScale: WIDE_FLOOR_SCALE, moveShift: 0, axes: 'none', pullOnly: true });
-    planShots(396, FPS, opts({ focal: f, aspect, seed: 3 })).forEach((s) => expect([s.move, s.moveScale]).toEqual(['pullOut', WIDE_FLOOR_SCALE]));
+    planShots(396, FPS, opts({ focal: f, aspect, seed: 3 })).forEach((s) => {
+      expect([s.move, s.moveScale, s.moveShift]).toEqual(['pushIn', PAN_SCALE, 0]);
+      expect(s.pan).toBeDefined();
+    });
   });
 
   it('a giant close-up face (core too big even for the floor push) pulls out only, never freezes', () => {
-    const giant = { x: 0.48, y: 0.36, w: 0.52, h: 0.55 }; // the old loose beat 6 box, read as a face
+    // A face-shaped (pixel aspect 1.07) box too big for the floor push. (The old loose beat 6 box,
+    // { x: 0.48, y: 0.36, w: 0.52, h: 0.55 }, is 1.68 wide per tall: since 2026-10-12 that reads as a group
+    // and pans -- see 'group pan reveal'.)
+    const giant = { x: 0.48, y: 0.4, w: 0.45, h: 0.75 };
+    expect(groupPan({ x: 0.48, y: 0.36, w: 0.52, h: 0.55 }, 3382 / 1902)).not.toBeNull();
+    expect(groupPan(giant, 3382 / 1902)).toBeNull();
     const b = wideMoveBudget(giant, 3382 / 1902);
     expect(b).toMatchObject({ moveScale: WIDE_FLOOR_SCALE, pullOnly: true, axes: 'none', moveShift: 0 });
     for (let seed = 0; seed <= 10; seed++) {
@@ -463,11 +477,16 @@ describe('wideMoveBudget (owner 2026-10-11 round 2: protect the face core, keep 
   });
 
   it('planShots: a zero-drift budget alternates push / pull', () => {
-    // A big subject high in a 3:2 photo: the push fits, no drift does (sideways too wide, vertically clamped).
-    const big = { x: 0.3, y: 0.3, w: 0.32, h: 0.4 };
-    expect(wideMoveBudget(big, LANDSCAPE)).toEqual({ moveScale: 1.2, driftScale: 1.2, moveShift: 0, axes: 'none', pullOnly: false });
+    // A big subject high in a 16:9 photo: the push fits, no drift does (sideways too wide, vertically clamped).
+    // (The earlier box here, { x: 0.3, y: 0.3, w: 0.32, h: 0.4 } on 3:2, is 1.2 wide per tall and too wide
+    // for the strip at the floor zoom: since 2026-10-12 it is a group and pans.)
+    const big = { x: 0.3, y: 0.3, w: 0.28, h: 0.45 };
+    const aspect = 16 / 9;
+    expect(groupPan({ x: 0.3, y: 0.3, w: 0.32, h: 0.4 }, LANDSCAPE)).not.toBeNull();
+    expect(groupPan(big, aspect)).toBeNull();
+    expect(wideMoveBudget(big, aspect)).toEqual({ moveScale: 1.2, driftScale: 1.2, moveShift: 0, axes: 'none', pullOnly: false });
     for (let seed = 0; seed <= 20; seed++) {
-      const shots = planShots(528, FPS, opts({ focal: big, seed }));
+      const shots = planShots(528, FPS, opts({ focal: big, aspect, seed }));
       shots.forEach((s) => expect(['pushIn', 'pullOut']).toContain(s.move));
       for (let i = 1; i < shots.length; i++) expect(shots[i].move).not.toBe(shots[i - 1].move);
     }
@@ -593,5 +612,126 @@ describe('small photos (A6)', () => {
   it('the card never exceeds 90% of the frame', () => {
     const s = smallPhotoSize(590, 100);
     expect(s.width).toBeLessThanOrEqual(972);
+  });
+});
+
+describe('group pan reveal (owner 2026-10-12: a group box wider than the 9:16 strip pans across it)', () => {
+  const P3 = { x: 0.201, y: 0.31, w: 0.39, h: 0.456 };
+  const A3 = 768 / 432;
+  // Faces measured on p3.jpg (image-width units): Piastri ~0.10-0.20, Norris ~0.23-0.36.
+  const PIASTRI = [0.1, 0.2];
+  const NORRIS = [0.23, 0.36];
+  const real: [string, Focal, number, number][] = [
+    ['beat 2 (p1, Stella)', { x: 0.654, y: 0.249, w: 0.261, h: 0.498 }, 1200 / 799, 0.787],
+    ['beat 4 (p3, Norris + Piastri)', P3, A3, 1.52],
+    ['beat 5 (p4, Stella presser)', { x: 0.504, y: 0.358, w: 0.318, h: 0.716 }, 1600 / 900, 0.79],
+    ['beat 6 (p5, Piastri)', { x: 0.578, y: 0.295, w: 0.23, h: 0.588 }, 3382 / 1902, 0.696],
+  ];
+  it.each(real)('detection, real %s: pixel aspect %f', (name, f, aspect, ratio) => {
+    expect(boxPixelAspect(f, aspect)).toBeCloseTo(ratio, 2);
+    const group = ratio > GROUP_PAN_ASPECT;
+    expect(group).toBe(name.startsWith('beat 4'));
+    expect(groupPan(f, aspect, photoLayout(f, aspect)) !== null).toBe(group);
+  });
+  it('only a cover-cropped group too wide for the strip at the floor zoom pans; everything else is unchanged', () => {
+    expect(groupPan(null, A3)).toBeNull();
+    expect(groupPan({ x: 0.2, y: 0.3 }, A3)).toBeNull();
+    expect(groupPan(P3, null)).toBeNull();
+    expect(groupPan(P3, A3, 'letterbox')).toBeNull();
+    expect(groupPan(P3, A3, 'small')).toBeNull();
+    expect(boxPixelAspect({ x: 0.2, y: 0.3, w: 0.2, h: 0.2 }, A3)).toBeGreaterThan(GROUP_PAN_ASPECT);
+    expect(groupPan({ x: 0.2, y: 0.3, w: 0.2, h: 0.2 }, A3)).toBeNull(); // a group that fits the strip
+    expect(groupPan({ x: 0.5, y: 0.4, w: 0.2, h: 0.15 }, 16 / 9)).toBeNull(); // wide box (aspect 2.4) that fits
+    expect(groupPan({ x: 0.5, y: 0.3, w: 0.9, h: 0.2 }, 0.5)).toBeNull(); // taller than 9:16: the whole width shows
+    expect(groupPan({ x: 0.5, y: 0.4, w: 0.3, h: 0.7 }, A3)).toBeNull(); // a big single head (aspect 0.76)
+  });
+  it('p3: pan endpoints put each face fully on screen at one end, the box middle throughout', () => {
+    const pan = groupPan(P3, A3)!;
+    expect(pan.moveScale).toBe(PAN_SCALE); // the box's height fits the frame at the full push
+    const { vw } = visibleFraction(A3);
+    const win = (c: number, z: number) => [c - vw / (2 * z), c + vw / (2 * z)];
+    const z0 = WIDE_SCALE;
+    const z1 = WIDE_SCALE * pan.moveScale;
+    // Left -> right: starts with the strip's left edge on the box's left edge, ends right edge on right edge.
+    const [rs, re] = [win(pan.right.c0, z0), win(pan.right.c1, z1)];
+    expect(rs[0]).toBeCloseTo(P3.x - P3.w / 2, 9);
+    expect(re[1]).toBeCloseTo(P3.x + P3.w / 2, 9);
+    // Right -> left: the reverse.
+    const [ls, le] = [win(pan.left.c0, z0), win(pan.left.c1, z1)];
+    expect(ls[1]).toBeCloseTo(P3.x + P3.w / 2, 9);
+    expect(le[0]).toBeCloseTo(P3.x - P3.w / 2, 9);
+    const inside = (w: number[], face: number[]) => w[0] <= face[0] && w[1] >= face[1];
+    for (const [a, b] of [[rs, re], [ls, le]]) {
+      expect(inside(a, PIASTRI) || inside(b, PIASTRI)).toBe(true);
+      expect(inside(a, NORRIS) || inside(b, NORRIS)).toBe(true);
+      for (const w of [a, b]) expect(w[0] < P3.x && w[1] > P3.x).toBe(true);
+    }
+    expect(inside(rs, PIASTRI) && inside(re, NORRIS)).toBe(true);
+    expect(inside(ls, NORRIS) && inside(le, PIASTRI)).toBe(true);
+    // The pan is the box overflow: ~0.09 of the photo width, ~30% of the frame -- clearly visible.
+    expect(pan.right.c1 - pan.right.c0).toBeGreaterThan(0.085);
+    expect((pan.right.c1 - pan.right.c0) / vw).toBeGreaterThan(0.28);
+  });
+  it('p3 plans: every shot pans at the gentle push, alternating direction between consecutive shots', () => {
+    for (let seed = 0; seed <= 10; seed++) {
+      for (const d of [200, 396, 528]) {
+        const sweep = seed % 2 === 0;
+        const shots = planShots(d, FPS, opts({ focal: P3, aspect: A3, layout: 'cover', seed, sweepIn: sweep, sweepOut: sweep }));
+        shots.forEach((s, i) => {
+          expect(s.scale).toBe(WIDE_SCALE);
+          expect([s.move, s.moveScale, s.moveShift]).toEqual(['pushIn', PAN_SCALE, 0]);
+          expect(s.pan!.dir).toBe(i % 2 === 0 ? 'right' : 'left');
+          expect(s.pan!.dir === 'right' ? s.pan!.c1 > s.pan!.c0 : s.pan!.c1 < s.pan!.c0).toBe(true);
+        });
+      }
+    }
+  });
+  it('a group whose box height cannot take the full push pans at a smaller one; the pan never runs backwards', () => {
+    let n = 0;
+    let reduced = 0;
+    for (const aspect of [1.2, 1.5, 16 / 9, 2.4]) {
+      for (const x of [0.1, 0.3, 0.5, 0.8]) {
+        for (const y of [0.1, 0.4, 0.7]) {
+          for (const w of [0.3, 0.45, 0.6, 0.8]) {
+            for (const h of [0.15, 0.3, 0.5, 0.9]) {
+              const pan = groupPan({ x, y, w, h }, aspect);
+              if (!pan) continue;
+              n++;
+              if (pan.moveScale < PAN_SCALE) reduced++;
+              expect(pan.moveScale).toBeGreaterThanOrEqual(1);
+              expect(pan.moveScale).toBeLessThanOrEqual(PAN_SCALE);
+              expect(pan.right.c1).toBeGreaterThanOrEqual(pan.right.c0 - 1e-12);
+              expect(pan.left.c1).toBeLessThanOrEqual(pan.left.c0 + 1e-12);
+              // The box middle stays CORE_MARGIN inside the end (tighter) window, unless a photo edge forbids.
+              const { vw } = visibleFraction(aspect);
+              const z1 = WIDE_SCALE * pan.moveScale;
+              const lim = vw / (2 * z1) - (CORE_MARGIN * vw) / z1;
+              const atEdge = (c: number) => c <= vw / (2 * WIDE_SCALE) + 1e-9 || c >= 1 - vw / (2 * WIDE_SCALE) - 1e-9;
+              for (const c of [pan.right.c0, pan.right.c1, pan.left.c0, pan.left.c1]) {
+                if (!atEdge(c)) expect(Math.abs(c - x)).toBeLessThanOrEqual(lim + 1e-9);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(n).toBeGreaterThan(50);
+    expect(reduced).toBeGreaterThan(0);
+  });
+  it('withObjectX replaces only the horizontal object-position', () => {
+    expect(withObjectX('6.26% 50.00%', 0.13785)).toBe('13.7850% 50.00%');
+  });
+});
+
+describe('regression locks vs 917ce04 (live): single faces plan exactly as before, no pan', () => {
+  it.each([
+    ['p1', { x: 0.654, y: 0.249, w: 0.261, h: 0.498 }, 1200 / 799, 303, [[0, 152, 1.04, 'sweep', 'pushIn', 1.2, 0.08], [152, 151, 1.04, 'hardPunch', 'pullOut', 1.2, 0.08]]],
+    ['p4', { x: 0.504, y: 0.358, w: 0.318, h: 0.716 }, 1600 / 900, 312, [[0, 156, 1.04, 'sweep', 'pushIn', 1.2, 0.055], [156, 156, 1.04, 'hardPunch', 'pullOut', 1.2, 0.055]]],
+    ['p5', { x: 0.578, y: 0.295, w: 0.23, h: 0.588 }, 3382 / 1902, 405, [[0, 135, 1.04, 'sweep', 'pushIn', 1.2, 0.08], [135, 135, 1.04, 'hardPunch', 'pullOut', 1.2, 0.08], [270, 135, 1.04, 'crashZoom', 'driftRight', 1.2, 0.08]]],
+  ] as const)('round-3 single-face box %s plans exactly the 917ce04 shots', (_n, f, aspect, d, want) => {
+    const o = opts({ focal: f, aspect, layout: photoLayout(f, aspect), seed: 2, slamIn: false, whiskOut: false, sweepIn: true, sweepOut: true });
+    const shots = planShots(d, FPS, o);
+    expect(shots.map((s) => [s.from, s.durationInFrames, s.scale, s.entry, s.move, s.moveScale, s.moveShift])).toEqual(want);
+    shots.forEach((s) => expect('pan' in s).toBe(false));
   });
 });

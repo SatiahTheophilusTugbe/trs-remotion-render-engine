@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Focal } from '../types/beat';
 import { framesForBeat } from '../lib/duration';
-import { photoLayout, planShots, smallPhotoSize, subjectFramePosition, type PhotoLayout } from '../lib/shots';
+import { photoLayout, planShots, smallPhotoSize, subjectFramePosition, withObjectX, type PhotoLayout } from '../lib/shots';
 import { shotFrameAt, type ShotFrame } from '../lib/shotMotion';
 
 export type ShotMotionOptions = { seed: number; slamIn: boolean; whiskOut: boolean; sweepIn?: boolean; sweepOut?: boolean };
@@ -27,5 +27,9 @@ export const useShotFrame = (
   const smallSize = layout === 'small' && beat.photo_w && beat.photo_h ? smallPhotoSize(beat.photo_w, beat.photo_h) : null;
   // Subject box centre in frame space (centred by the object-position); the shot motion centres on it.
   const subject = subjectFramePosition(focal, aspect);
-  return { shot: shotFrameAt(shots, frame, subject), objectPosition: subject?.objectPosition ?? 'center top', layout, smallSize };
+  const shot = shotFrameAt(shots, frame, subject);
+  const base = subject?.objectPosition ?? 'center top';
+  // A group pan moves the horizontal object-position frame by frame (shots.ts groupPan).
+  const objectPosition = shot.objectX === undefined ? base : withObjectX(base, shot.objectX);
+  return { shot, objectPosition, layout, smallSize };
 };

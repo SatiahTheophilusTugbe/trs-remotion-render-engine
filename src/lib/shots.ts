@@ -23,7 +23,16 @@ export type Shot = {
   /** Largest extra scale / drift (fraction of frame) this shot's hold move adds. */
   moveScale: number;
   moveShift: number;
+  /** Group pan reveal (groupPan): set only on the wide shots of a group box wider than the strip. */
+  pan?: ShotPan;
 };
+/**
+ * A horizontal pan across a group box (owner, 2026-10-12). The visible window's centre, in image-width
+ * units, travels from c0 (hold start) to c1 (hold end) on the hold ease while the zoom pushes (move
+ * 'pushIn', moveScale). shotMotion drives it through the object-position, since the cover-fit photo's
+ * translate alone cannot travel past the strip the object-position shows.
+ */
+export type ShotPan = { dir: 'right' | 'left'; vw: number; c0: number; c1: number };
 export type PlanOptions = {
   focal?: Focal | null;
   aspect?: number | null; // photo width / height
@@ -309,6 +318,99 @@ export const wideMoveBudget = (
   return { moveScale, driftScale: moveScale, moveShift: 0, axes: 'none', pullOnly };
 };
 
+// Group pan reveal (owner, 2026-10-12). A group / two-shot box wider than the strip a 9:16 frame shows
+// cannot be framed by any static or centred move: one outer face is always cut (real beat 4: Norris +
+// Piastri, box 0.39 of the photo width vs a ~0.30 strip), and 13a's group box can sit ~0.03 off the faces,
+// so centring on it is unreliable too. Such a shot pans across the box instead, at a gentle push: it
+// starts with the strip's left edge on the box's left edge and ends with its right edge on the box's
+// right edge (or the reverse), so every face is fully on screen at one end and the box middle throughout.
+/** A box is a group (faces side by side) when its pixel width / height exceeds this; one head is ~0.7-0.8. */
+export const GROUP_PAN_ASPECT = 1.15;
+/** The pan's push: the zoom goes from 1.00 to at most this (on top of WIDE_SCALE) across the pan. */
+export const PAN_SCALE = 1.06;
+const PAN_SCALE_STEPS = 6; // 1.06 down to 1.00 in 0.01 steps, until the box's height stays in frame
+// A pan whose window travels less than this (fraction of the frame) only counts as motion with a push
+// of at least PAN_MIN_PUSH; otherwise the shot keeps the regular wide budget (never a near-still shot).
+const PAN_MIN_TRAVEL = 0.03;
+const PAN_MIN_PUSH = 1.05;
+
+export type GroupPan = {
+  /** The push across the pan (multiplier on WIDE_SCALE, 1.00 to PAN_SCALE). */
+  moveScale: number;
+  /** Visible fraction of the photo width at zoom 1, and the pans in each direction (window centres). */
+  vw: number;
+  right: { c0: number; c1: number };
+  left: { c0: number; c1: number };
+};
+
+/** The box's pixel width / height (w x imgW) / (h x imgH), or null without a box / photo size. */
+export const boxPixelAspect = (focal: Focal | null | undefined, aspect: number | null | undefined): number | null =>
+  !focal || focal.w === undefined || focal.h === undefined || !aspect || !(aspect > 0) || !(focal.h > 0)
+    ? null
+    : (focal.w * aspect) / focal.h;
+
+/**
+ * The pan reveal for a wide shot, or null when the regular wide budget applies: only a cover-cropped photo
+ * wider than the frame, whose box is a group (pixel aspect > GROUP_PAN_ASPECT) AND too wide for the strip
+ * at the floor zoom (box width plus CORE_MARGIN each side, at WIDE_SCALE x WIDE_FLOOR_SCALE). Single faces,
+ * no box, letterbox / small layouts and groups that fit are unchanged.
+ */
+export const groupPan = (
+  focal: Focal | null | undefined,
+  aspect: number | null | undefined,
+  layout: PhotoLayout = 'cover',
+): GroupPan | null => {
+  const ratio = boxPixelAspect(focal, aspect);
+  if (layout !== 'cover' || ratio === null || !(ratio > GROUP_PAN_ASPECT) || !(aspect! > FRAME_ASPECT)) return null;
+  const f = focal!;
+  const w = f.w!;
+  const { vw, vh } = visibleFraction(aspect!);
+  if ((w / vw) * WIDE_SCALE * WIDE_FLOOR_SCALE <= 1 - 2 * CORE_MARGIN) return null; // the group fits
+  // The push: the largest from PAN_SCALE down to 1.00 that keeps the box's whole height inside CORE_MARGIN
+  // at every zoom of the pan (same vertical maths as the core checks; 1.00 if even that fails).
+  const pos = subjectFramePosition(f, aspect)!;
+  const halfH = f.h! / 2 / vh;
+  let s = 1;
+  for (let i = 0; i <= PAN_SCALE_STEPS; i++) {
+    const k = Math.round((PAN_SCALE - ((PAN_SCALE - 1) * i) / PAN_SCALE_STEPS) * 1e4) / 1e4;
+    let ok = true;
+    for (let j = 0; j <= 16 && ok; j++) ok = axisInside(pos.y, halfH, SUBJECT_TARGET_Y, WIDE_SCALE * (1 + ((k - 1) * j) / 16), 0);
+    if (ok) {
+      s = k;
+      break;
+    }
+  }
+  // Half the visible window (image-width units) at the pan's start and end zoom.
+  const h0 = vw / (2 * WIDE_SCALE);
+  const h1 = vw / (2 * WIDE_SCALE * s);
+  const boxL = f.x - w / 2;
+  const boxR = f.x + w / 2;
+  // The box middle stays on screen (CORE_MARGIN inside the tighter, end window) throughout; then no photo
+  // edge may show.
+  const lim = h1 - (CORE_MARGIN * vw) / (WIDE_SCALE * s);
+  const fix = (c: number, h: number) => clamp(clamp(c, f.x - lim, f.x + lim), h, 1 - h);
+  // Strip's left edge on the box's left edge (start zoom) -> right edge on the box's right edge (end zoom),
+  // and the reverse. A box narrower than the two half-windows (it fits the wider start window whole, but
+  // not the floor push) would make that run backwards; its two ends swap, so the pan still runs in its
+  // direction and the start frame shows the whole box.
+  const [a, b] = [boxL + h0, boxR - h1];
+  const [la, lb] = [boxR - h0, boxL + h1];
+  const right = { c0: Math.min(a, b), c1: Math.max(a, b) };
+  const left = { c0: Math.max(la, lb), c1: Math.min(la, lb) };
+  // The clamps can pinch a pan near a photo edge; it then shortens, never reverses.
+  const r0 = fix(right.c0, h0);
+  const l0 = fix(left.c0, h0);
+  const pan = {
+    moveScale: s,
+    vw,
+    right: { c0: r0, c1: Math.max(r0, fix(right.c1, h1)) },
+    left: { c0: l0, c1: Math.min(l0, fix(left.c1, h1)) },
+  };
+  const travel = Math.min(pan.right.c1 - pan.right.c0, pan.left.c0 - pan.left.c1) / vw;
+  if (travel < PAN_MIN_TRAVEL && s < PAN_MIN_PUSH) return null;
+  return pan;
+};
+
 // Every move a shot can get. HOLD_MOVES (the seeded pool) never contains 'fall': it only stands in for a
 // horizontal drift on a photo that has room to drift vertically only.
 export const ALL_HOLD_MOVES: HoldMove[] = ['pushIn', 'driftLeft', 'pullOut', 'rise', 'driftRight', 'fall'];
@@ -385,6 +487,8 @@ export const planShots = (durationInFrames: number, fps: number, opts: PlanOptio
   if (durationInFrames <= 0) return [];
   const crop = safeCropScale(opts.focal, opts.aspect);
   const wide = wideMoveBudget(opts.focal, opts.aspect, opts.layout);
+  const pan = groupPan(opts.focal, opts.aspect, opts.layout);
+  let panCount = 0;
   const n = shotCount(durationInFrames, fps);
   // Each inner cut is drawn at random from INNER_CUTS, never the same as the cut before it.
   const cuts: InnerCut[] = [];
@@ -405,6 +509,23 @@ export const planShots = (durationInFrames: number, fps: number, opts: PlanOptio
     const tight = crop !== null && i % 2 === 1;
     const b = tight ? TIGHT_BUDGET : wide;
     const prev = shots[i - 1]?.move;
+    if (!tight && pan) {
+      // Group pan reveal: every wide shot pans, alternating direction so consecutive cuts never repeat.
+      const dir = panCount++ % 2 === 0 ? 'right' : 'left';
+      shots.push({
+        from,
+        durationInFrames: to - from,
+        scale: WIDE_SCALE,
+        entry,
+        whiskOut: i === n - 1 && opts.whiskOut && !sweepOut,
+        sweepOut: i === n - 1 && sweepOut,
+        move: 'pushIn',
+        moveScale: pan.moveScale,
+        moveShift: 0,
+        pan: { dir, vw: pan.vw, ...pan[dir] },
+      });
+      continue;
+    }
     let slot = (moveStart + i * 2) % HOLD_MOVES.length;
     let move = HOLD_MOVES[slot];
     if (b.axes === 'xy' && !b.pullOnly) {
@@ -433,3 +554,7 @@ export const planShots = (durationInFrames: number, fps: number, opts: PlanOptio
 // photo size is known, the old proportional focal placement when it is not, 'center top' without a focal.
 export const focalObjectPosition = (focal?: Focal | null, aspect?: number | null): string =>
   subjectFramePosition(focal, aspect)?.objectPosition ?? 'center top';
+
+/** An object-position with its horizontal part replaced by `x` (0-1): a pan shot's per-frame position. */
+export const withObjectX = (objectPosition: string, x: number): string =>
+  `${(x * 100).toFixed(4)}% ${objectPosition.split(' ')[1] ?? '50.00%'}`;

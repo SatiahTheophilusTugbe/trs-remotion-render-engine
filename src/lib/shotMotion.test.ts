@@ -52,7 +52,9 @@ describe('shotFrameAt edge safety', () => {
     { x: 1, y: 1, w: 0.1, h: 0.1 },
     person,
     { x: 0.8, y: 0.2, w: 0.1, h: 0.2 },
-    { x: 0.5, y: 0.5, w: 0.9, h: 0.6 },
+    { x: 0.5, y: 0.5, w: 0.9, h: 0.6 }, // a group wider than the strip: pans (objectX)
+    { x: 0.05, y: 0.3, w: 0.5, h: 0.2 }, // a group pan pinched at the photo's left edge
+    { x: 0.95, y: 0.7, w: 0.5, h: 0.2 }, // ... and at its right edge
   ];
   it('never exposes an edge on any frame', () => {
     const violations: string[] = [];
@@ -63,7 +65,8 @@ describe('shotFrameAt edge safety', () => {
           for (let f = 0; f < d; f++) {
             const s = shotFrameAt(shots, f, at(focal));
             const limit = (s.scale - 1) * 50 + 1e-9;
-            if (s.scale < 1 || Math.abs(s.txPct) > limit || Math.abs(s.tyPct) > limit) {
+            const badX = s.objectX !== undefined && !(s.objectX >= 0 && s.objectX <= 1);
+            if (s.scale < 1 || Math.abs(s.txPct) > limit || Math.abs(s.tyPct) > limit || badX) {
               violations.push(JSON.stringify({ focal, seed, d, f, s }));
             }
           }
@@ -354,7 +357,7 @@ describe('subject safety in the steady state (owner 2026-10-11, round 2: face co
     expect(bad).toEqual([]);
   });
   it('a pull-only shot (giant close-up face) visibly pulls out and ends at the widest framing', () => {
-    const giant: Focal = { x: 0.48, y: 0.36, w: 0.52, h: 0.55 };
+    const giant: Focal = { x: 0.48, y: 0.4, w: 0.45, h: 0.75 }; // face-shaped (a wider one would pan: groupPan)
     const aspect = 3382 / 1902;
     const p = at(giant, aspect)!;
     for (let seed = 0; seed <= 4; seed++) {
@@ -402,7 +405,12 @@ describe('subject safety in the steady state (owner 2026-10-11, round 2: face co
                   const a = shotFrameAt(shots, shot.from + k0, p);
                   const b = shotFrameAt(shots, shot.from + shot.durationInFrames - 1 - EXIT, p);
                   const zoom = Math.abs(b.scale - a.scale) / a.scale;
-                  const pan = Math.max(Math.abs(b.txPct - a.txPct), Math.abs(b.tyPct - a.tyPct));
+                  // A group pan travels mostly through the object-position: count the visible window's
+                  // centre travel (in % of the frame width at zoom 1) as well.
+                  const v = shot.pan?.vw ?? 1;
+                  const centre = (s: ShotFrame) => v * (0.5 - s.txPct / 100 / s.scale) + (s.objectX ?? 0) * (1 - v);
+                  const panTravel = shot.pan ? (Math.abs(centre(b) - centre(a)) / v) * 100 : 0;
+                  const pan = Math.max(Math.abs(b.txPct - a.txPct), Math.abs(b.tyPct - a.tyPct), panTravel);
                   if (!(zoom >= 0.05 || pan >= 3)) still.push(JSON.stringify({ f, aspect, seed, move: shot.move, zoom, pan }));
                 }
               }
@@ -413,5 +421,93 @@ describe('subject safety in the steady state (owner 2026-10-11, round 2: face co
     }
     expect(shotsChecked).toBeGreaterThan(1000);
     expect(still).toEqual([]);
+  });
+});
+
+describe('group pan reveal on rendered frames (owner 2026-10-12, real beat 4 p3)', () => {
+  const P3: Focal = { x: 0.201, y: 0.31, w: 0.39, h: 0.456 };
+  const A3 = 768 / 432;
+  const PIASTRI = [0.1, 0.2];
+  const NORRIS = [0.23, 0.36];
+  const ENTRY: Record<string, number> = {
+    none: 0,
+    slam: SLAM_FRAMES + SHAKE_FRAMES,
+    sweep: SWEEP_IN_FRAMES,
+    hardPunch: PUNCH_FRAMES,
+    whip: WHIP_FRAMES,
+    whipUp: WHIP_FRAMES,
+    crashZoom: CRASH_FRAMES,
+  };
+  const EXIT = Math.max(WHIP_FRAMES, CRASH_OUT_FRAMES, SWEEP_OUT_FRAMES, WHISK_FRAMES);
+  const { vw } = visibleFraction(A3);
+  // Visible image window (image-width units) of a pan frame: object-position objectX, then the zoom + translate.
+  const win = (s: ShotFrame) => {
+    const t = s.txPct / 100;
+    const f0 = 0.5 - (0.5 + t) / s.scale;
+    const f1 = 0.5 + (0.5 - t) / s.scale;
+    return [vw * f0 + s.objectX! * (1 - vw), vw * f1 + s.objectX! * (1 - vw)];
+  };
+  const inside = (w: number[], face: number[]) => w[0] <= face[0] && w[1] >= face[1];
+  it('steady state: box middle and box height always on screen, each face whole at one end, direction alternates', () => {
+    const pos = at(P3, A3)!;
+    const bad: string[] = [];
+    let shotsChecked = 0;
+    for (let seed = 0; seed <= 8; seed++) {
+      for (const [d, sweep] of [[300, false], [396, true], [528, false], [528, true]] as const) {
+        const shots = plan(d, { focal: P3, aspect: A3, layout: 'cover', seed, sweepIn: sweep, sweepOut: sweep });
+        shots.forEach((shot, i) => {
+          shotsChecked++;
+          const k0 = ENTRY[shot.entry];
+          const k1 = shot.durationInFrames - 1 - EXIT;
+          const first = win(shotFrameAt(shots, shot.from + k0, pos));
+          const last = win(shotFrameAt(shots, shot.from + k1, pos));
+          for (const [face, name] of [[PIASTRI, 'Piastri'], [NORRIS, 'Norris']] as const) {
+            if (!inside(first, face) && !inside(last, face)) bad.push(`${seed}/${d}/shot${i}: ${name} never whole`);
+          }
+          // Shot 1 (and every even shot) pans left -> right: the window moves right; odd shots the reverse.
+          const moved = (last[0] + last[1]) / 2 - (first[0] + first[1]) / 2;
+          if (i % 2 === 0 ? !(moved > 0.05) : !(moved < -0.05)) bad.push(`${seed}/${d}/shot${i}: direction ${moved}`);
+          for (let k = k0; k <= k1; k++) {
+            const s = shotFrameAt(shots, shot.from + k, pos);
+            const [l, r] = win(s);
+            const m = (CORE_MARGIN * vw) / s.scale;
+            if (!(l >= -1e-9 && r <= 1 + 1e-9)) bad.push(`${seed}/${d}/${shot.from + k}: photo edge ${l} ${r}`);
+            if (!(l <= P3.x - m && r >= P3.x + m)) bad.push(`${seed}/${d}/${shot.from + k}: box middle out ${l} ${r}`);
+            // Vertically (the whole height shows at zoom 1 on a landscape photo): the box's full height in frame.
+            const ty = s.tyPct / 100;
+            const y0 = 0.5 + ty + s.scale * (P3.y - P3.h! / 2 - 0.5);
+            const y1 = 0.5 + ty + s.scale * (P3.y + P3.h! / 2 - 0.5);
+            if (!(y0 >= CORE_MARGIN - 1e-6 && y1 <= 1 - CORE_MARGIN + 1e-6)) bad.push(`${seed}/${d}/${shot.from + k}: box height ${y0} ${y1}`);
+          }
+        });
+      }
+    }
+    expect(shotsChecked).toBeGreaterThan(80);
+    expect(bad).toEqual([]);
+  });
+  it('the pan visibly moves: ~30% of the frame width across a shot, plus the gentle push', () => {
+    const pos = at(P3, A3)!;
+    const shots = plan(396, { focal: P3, aspect: A3, layout: 'cover', seed: 3, slamIn: false, whiskOut: false });
+    for (const shot of shots) {
+      const a = shotFrameAt(shots, shot.from + ENTRY[shot.entry], pos);
+      const b = shotFrameAt(shots, shot.from + shot.durationInFrames - 1, pos);
+      const [wa, wb] = [win(a), win(b)];
+      expect(Math.abs((wb[0] + wb[1]) / 2 - (wa[0] + wa[1]) / 2) / vw).toBeGreaterThan(0.25);
+      expect(b.scale / a.scale).toBeGreaterThan(1.05);
+    }
+  });
+  it('transients are unchanged: the first frame of a slam is the same oversize + blur as any other shot', () => {
+    const p3 = plan(396, { focal: P3, aspect: A3, layout: 'cover', seed: 3 });
+    const none = plan(396, { focal: null, seed: 3 });
+    const a = shotFrameAt(p3, 0, at(P3, A3));
+    const b = shotFrameAt(none, 0, null);
+    expect(a.blurY).toBe(b.blurY);
+    expect(a.scale / (WIDE_SCALE * holdMove('pushIn', 0, p3[0].moveScale, 0).m)).toBeCloseTo(b.scale / (WIDE_SCALE * holdMove(none[0].move, 0, none[0].moveScale, none[0].moveShift).m), 9);
+  });
+  it('single faces and no box never get an objectX (their frames are unchanged)', () => {
+    for (const f of [null, person, { x: 0.654, y: 0.249, w: 0.261, h: 0.498 }]) {
+      const shots = plan(396, { focal: f, seed: 1 });
+      for (let k = 0; k < 396; k++) expect(shotFrameAt(shots, k, at(f)).objectX).toBeUndefined();
+    }
   });
 });

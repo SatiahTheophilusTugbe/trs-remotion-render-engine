@@ -12,7 +12,15 @@ import {
 } from './shots';
 import { WIPE_HALF_FRAMES } from './transitions';
 
-export type ShotFrame = { scale: number; txPct: number; tyPct: number; blurX: number; blurY: number };
+export type ShotFrame = {
+  scale: number;
+  txPct: number;
+  tyPct: number;
+  blurX: number;
+  blurY: number;
+  /** Pan shots only (shots.ts groupPan): this frame's horizontal object-position, 0-1. */
+  objectX?: number;
+};
 
 export const SLAM_FRAMES = 8; // lands just after the 5-frame wipe half clears
 export const SLAM_OVERSIZE = 1.25;
@@ -97,7 +105,8 @@ export const shotFrameAt = (shots: Shot[], frame: number, subject?: { x: number;
   // A swept-in photo holds still until it has settled, then its hold move starts.
   const e0 = shot.entry === 'sweep' ? Math.min(SWEEP_IN_FRAMES, d - 1) : 0;
   const span = d - 1 - e0;
-  const hold = holdMove(shot.move, span > 0 ? (k - e0) / span : 0, shot.moveScale, shot.moveShift);
+  const tHold = span > 0 ? (k - e0) / span : 0;
+  const hold = holdMove(shot.move, tHold, shot.moveScale, shot.moveShift);
   let mult = hold.m;
   let dx = hold.dx;
   let dy = hold.dy;
@@ -170,6 +179,23 @@ export const shotFrameAt = (shots: Shot[], frame: number, subject?: { x: number;
 
   const scale = Math.max(1, shot.scale * mult);
   const limit = (scale - 1) * 50;
+  if (shot.pan) {
+    // Group pan reveal: the window centre travels c0 -> c1 (image-width units) on the hold ease. The
+    // object-position carries it (no edge can show while it stays 0..1); the translate only takes the part
+    // beyond the photo's last object-position, so transients keep their usual clamp room.
+    const { vw: v, c0, c1 } = shot.pan;
+    const c = c0 + (c1 - c0) * HOLD_EASE(clamp(tHold, 0, 1));
+    const objectX = clamp((c - v / 2) / (1 - v), 0, 1);
+    const fc = (c - objectX * (1 - v)) / v; // the window centre before the zoom, as a frame fraction
+    return {
+      scale,
+      txPct: clamp((0.5 - fc) * scale * 100 + dx, -limit, limit),
+      tyPct: clamp(centreOn(subject?.y, SUBJECT_TARGET_Y, scale) + dy, -limit, limit),
+      blurX,
+      blurY,
+      objectX,
+    };
+  }
   return {
     scale,
     txPct: clamp(centreOn(subject?.x, SUBJECT_TARGET_X, scale) + dx, -limit, limit),
