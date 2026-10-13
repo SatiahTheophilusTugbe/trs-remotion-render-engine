@@ -1,8 +1,8 @@
 {
   "region": "us-east-1",
   "functionName": "remotion-render-4-0-526-mem2048mb-disk2048mb-300sec",
-  "siteName": "trs-remotion-face-450a3d7",
-  "serveUrl": "https://remotionlambda-useast1-riu6td7irs.s3.us-east-1.amazonaws.com/sites/trs-remotion-face-450a3d7/index.html",
+  "siteName": "trs-remotion-pan-066eea1",
+  "serveUrl": "https://remotionlambda-useast1-riu6td7irs.s3.us-east-1.amazonaws.com/sites/trs-remotion-pan-066eea1/index.html",
   "apiBaseUrl": "https://trs-remotion-render-engine.vercel.app",
   "vercelProject": "satiah-s-projects/trs-remotion-render-engine"
 }
