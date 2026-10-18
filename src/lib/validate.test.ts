@@ -266,3 +266,48 @@ describe('photo_credit', () => {
     }
   });
 });
+
+describe('visuals', () => {
+  const v = (url: string, at_sec: number, o: object = {}) => ({ url, at_sec, layout: 'single', ...o });
+  const b10 = (visuals: unknown, o: object = {}) => broll({ duration_sec: 10, visuals, ...o });
+  const visualsOf = (r: ReturnType<typeof okRes>, i = 0) =>
+    (r.inputProps.beats[i] as unknown as { visuals?: Record<string, unknown>[] }).visuals;
+
+  it('accepts a beat with two visuals', () => {
+    const r = okRes(props([b10([v('https://a/1.jpg', 0), v('https://a/2.jpg', 4.2)])]));
+    expect(visualsOf(r)).toHaveLength(2);
+  });
+  it('first visual must start at 0', () => {
+    expect(errs(props([b10([v('https://a/1.jpg', 0.5)])])).join(' ')).toContain('visuals[0].at_sec must be 0');
+  });
+  it('at_sec must strictly increase and stay below duration_sec', () => {
+    expect(errs(props([b10([v('https://a/1.jpg', 0), v('https://a/2.jpg', 3), v('https://a/3.jpg', 3)])])).join(' ')).toContain('at_sec');
+    expect(errs(props([b10([v('https://a/1.jpg', 0), v('https://a/2.jpg', 10)])])).join(' ')).toContain('at_sec');
+  });
+  it('split needs url_b', () => {
+    expect(errs(props([b10([v('https://a/1.jpg', 0, { layout: 'split' })])])).join(' ')).toContain('url_b');
+  });
+  it('urls must be https', () => {
+    expect(errs(props([b10([v('http://a/1.jpg', 0)])])).join(' ')).toContain('visuals[0].url');
+  });
+  it('duplicate url across the whole input warns', () => {
+    const r = okRes(props([b10([v('https://a/1.jpg', 0)]), b10([v('https://a/1.jpg', 0)], { beat_index: 2 })]));
+    expect(r.warnings.join(' ')).toContain('duplicate visual url');
+  });
+  it('focal and credit are sanitised like beat focal/credit', () => {
+    const r = okRes(props([b10([v('https://a/1.jpg', 0, { focal: { x: 2, y: 0.5 }, credit: 'https://x.com', photo_w: 999 })])]));
+    const vis = visualsOf(r)![0];
+    expect(vis.focal).toBeUndefined();
+    expect(vis.credit).toBeUndefined();
+    expect(vis.photo_w).toBeUndefined();
+    expect(r.warnings.join(' ')).toContain('focal ignored');
+  });
+  it('max 8 visuals per beat', () => {
+    const nine = Array.from({ length: 9 }, (_, i) => v(`https://a/${i}.jpg`, i));
+    expect(errs(props([b10(nine)])).join(' ')).toContain('at most 8');
+  });
+  it('beat without visuals validates exactly as before', () => {
+    const r = okRes(props([broll()]));
+    expect(visualsOf(r)).toBeUndefined();
+  });
+});

@@ -37,6 +37,97 @@ const toNum = (v: unknown): number => {
 };
 const clamp = (s: string, max: number): string => (s.length > max ? s.slice(0, max - 1) + '…' : s);
 
+const MAX_VISUALS = 8;
+
+// Focal point is an enhancement, never a blocker: invalid values are dropped with a warning.
+function sanitizeFocal(raw: unknown, p: string, warnings: string[]): Record<string, number> | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const f = isObj(raw) ? raw : {};
+  const fx = toNum(f.x);
+  const fy = toNum(f.y);
+  if (!(Number.isFinite(fx) && Number.isFinite(fy) && fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1)) {
+    warnings.push(`${p}: focal ignored (needs x and y between 0 and 1)`);
+    return undefined;
+  }
+  const focal: Record<string, number> = { x: fx, y: fy };
+  if (f.w !== undefined || f.h !== undefined) {
+    const fw = toNum(f.w);
+    const fh = toNum(f.h);
+    if (Number.isFinite(fw) && Number.isFinite(fh) && fw > 0 && fw <= 1 && fh > 0 && fh <= 1) {
+      focal.w = fw;
+      focal.h = fh;
+    } else {
+      warnings.push(`${p}: focal box ignored (needs w and h above 0 and at most 1)`);
+    }
+  }
+  return focal;
+}
+
+// A credit must be a plain source name; anything unusable is dropped with a warning (label = field path).
+function sanitizeCredit(raw: unknown, label: string, warnings: string[]): string | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const c = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
+  if (!c || /https?:|www\.|\.[a-z]{2,}\b/i.test(c)) {
+    warnings.push(`${label} ignored (must be a plain source name, not a URL)`);
+    return undefined;
+  }
+  if (c.length > MAX_CREDIT) warnings.push(`${label} clamped to ${MAX_CREDIT} chars`);
+  return clamp(c, MAX_CREDIT);
+}
+
+// visuals[]: the images shown in turn during one beat (named-subject visuals, 2026-10-17). Each starts
+// at at_sec (first at 0, strictly increasing, below the beat's duration). A 'split' shows url + url_b.
+function sanitizeVisuals(
+  raw: unknown, p: string, durationSec: number, errors: string[], warnings: string[], seen: Set<string>,
+): Record<string, unknown>[] | undefined {
+  if (!Array.isArray(raw)) {
+    errors.push(`${p}: visuals must be an array`);
+    return undefined;
+  }
+  if (raw.length > MAX_VISUALS) {
+    errors.push(`${p}: visuals must contain at most ${MAX_VISUALS} items`);
+    return undefined;
+  }
+  const out: Record<string, unknown>[] = [];
+  let prev = -Infinity;
+  raw.forEach((rv: unknown, j: number) => {
+    const q = `${p}: visuals[${j}]`;
+    if (!isObj(rv)) {
+      errors.push(`${q} must be an object`);
+      return;
+    }
+    const at = toNum(rv.at_sec);
+    if (j === 0 && at !== 0) errors.push(`${q}.at_sec must be 0`);
+    else if (!Number.isFinite(at) || at <= prev || at >= durationSec) {
+      errors.push(`${q}.at_sec must increase and stay below duration_sec`);
+    }
+    prev = at;
+    const layout = rv.layout === 'split' ? 'split' : 'single';
+    const vis: Record<string, unknown> = { at_sec: at, layout };
+    const urlOk = (k: 'url' | 'url_b') => {
+      const u = rv[k];
+      if (!isHttps(u) || u.length > MAX_URL_LEN) {
+        errors.push(`${q}.${k} invalid (must be https:// and at most ${MAX_URL_LEN} chars)`);
+        return;
+      }
+      if (seen.has(u)) warnings.push(`${q}: duplicate visual url`);
+      seen.add(u);
+      vis[k] = u;
+    };
+    urlOk('url');
+    if (layout === 'split') urlOk('url_b');
+    for (const sfx of ['', '_b'] as const) {
+      if (sfx === '_b' && layout !== 'split') continue;
+      const focal = sanitizeFocal(rv['focal' + sfx], q, warnings);
+      if (focal) vis['focal' + sfx] = focal;
+      const credit = sanitizeCredit(rv['credit' + sfx], `${q}.credit${sfx}`, warnings);
+      if (credit) vis['credit' + sfx] = credit;
+    }
+    out.push(vis);
+  });
+  return out;
+}
+
 export function validateRenderInput(inputProps: unknown): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -62,6 +153,7 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
 
   let total = 0;
   const beats: Beat[] = [];
+  const seenVisualUrls = new Set<string>();
   rawBeats.forEach((raw: unknown, i: number) => {
     if (!isObj(raw)) {
       errors.push(`beat ${i}: must be an object`);
@@ -104,38 +196,18 @@ export function validateRenderInput(inputProps: unknown): ValidationResult {
     // Photo pixel size is measured by rehost from the real bytes; never trust a caller's value.
     delete beat.photo_w;
     delete beat.photo_h;
-    if (raw.focal !== undefined && raw.focal !== null) {
-      const f = isObj(raw.focal) ? raw.focal : {};
-      const fx = toNum(f.x);
-      const fy = toNum(f.y);
-      if (Number.isFinite(fx) && Number.isFinite(fy) && fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1) {
-        const focal: Record<string, number> = { x: fx, y: fy };
-        if (f.w !== undefined || f.h !== undefined) {
-          const fw = toNum(f.w);
-          const fh = toNum(f.h);
-          if (Number.isFinite(fw) && Number.isFinite(fh) && fw > 0 && fw <= 1 && fh > 0 && fh <= 1) {
-            focal.w = fw;
-            focal.h = fh;
-          } else {
-            warnings.push(`${p}: focal box ignored (needs w and h above 0 and at most 1)`);
-          }
-        }
-        beat.focal = focal;
-      } else {
-        warnings.push(`${p}: focal ignored (needs x and y between 0 and 1)`);
-      }
-    }
+    const focal = sanitizeFocal(raw.focal, p, warnings);
+    if (focal) beat.focal = focal;
 
     // Photo credit is an enhancement, never a blocker: anything unusable is dropped with a warning.
     delete beat.photo_credit;
-    if (raw.photo_credit !== undefined && raw.photo_credit !== null && raw.photo_credit !== '') {
-      const c = typeof raw.photo_credit === 'string' ? raw.photo_credit.replace(/\s+/g, ' ').trim() : '';
-      if (!c || /https?:|www\.|\.[a-z]{2,}\b/i.test(c)) {
-        warnings.push(`${p}: photo_credit ignored (must be a plain source name, not a URL)`);
-      } else {
-        beat.photo_credit = clamp(c, MAX_CREDIT);
-        if (c.length > MAX_CREDIT) warnings.push(`${p}: photo_credit clamped to ${MAX_CREDIT} chars`);
-      }
+    const credit = sanitizeCredit(raw.photo_credit, `${p}: photo_credit`, warnings);
+    if (credit) beat.photo_credit = credit;
+
+    delete beat.visuals;
+    if (raw.visuals !== undefined && raw.visuals !== null) {
+      const vs = sanitizeVisuals(raw.visuals, p, Number.isFinite(d) ? d : Infinity, errors, warnings, seenVisualUrls);
+      if (vs) beat.visuals = vs;
     }
 
     if (raw.overlay_text !== undefined && raw.overlay_text !== null) {
