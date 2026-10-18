@@ -145,7 +145,8 @@ export const shotFrameAt = (shots: Shot[], frame: number, subject?: { x: number;
     blurX = WHIP_BLUR * r;
   }
 
-  const next = shots[i + 1];
+  // A segment's last shot with exitCut behaves as if followed by a shot entering on that cut.
+  const next: Pick<Shot, 'entry'> | undefined = shots[i + 1] ?? (shot.exitCut ? { entry: shot.exitCut } : undefined);
   const kWhipOut = k - (d - WHIP_FRAMES);
   const kWhisk = k - (d - WHISK_FRAMES);
   const kSweep = k - (d - SWEEP_OUT_FRAMES);

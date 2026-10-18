@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   ALL_HOLD_MOVES,
+  INNER_CUTS,
+  type InnerCut,
   BOX_PAD,
   CORE_MARGIN,
   HOLD_MOVES,
@@ -60,8 +62,13 @@ describe('shotFrameAt edge safety', () => {
     const violations: string[] = [];
     for (const focal of focals) {
       for (let seed = 0; seed <= 5; seed++) {
-        for (const [d, sweep] of [[30, false], [282, false], [420, false], [528, false], [528, true], [300, true], [30, true]] as const) {
-          const shots = plan(d, { focal, seed, sweepIn: sweep, sweepOut: sweep });
+        const cases: [number, boolean, InnerCut | undefined][] = [
+          [30, false, undefined], [282, false, undefined], [420, false, undefined], [528, false, undefined],
+          [528, true, undefined], [300, true, undefined], [30, true, undefined],
+          ...INNER_CUTS.map((c): [number, boolean, InnerCut] => [150, false, c]),
+        ];
+        for (const [d, sweep, cut] of cases) {
+          const shots = plan(d, { focal, seed, sweepIn: sweep, sweepOut: sweep, entryCut: cut, exitCut: cut });
           for (let f = 0; f < d; f++) {
             const s = shotFrameAt(shots, f, at(focal));
             const limit = (s.scale - 1) * 50 + 1e-9;
@@ -509,5 +516,29 @@ describe('group pan reveal on rendered frames (owner 2026-10-12, real beat 4 p3)
       const shots = plan(396, { focal: f, seed: 1 });
       for (let k = 0; k < 396; k++) expect(shotFrameAt(shots, k, at(f)).objectX).toBeUndefined();
     }
+  });
+});
+
+
+describe('visual segment entry/exit cuts (2026-10-17)', () => {
+  it('entryCut overrides the first entry', () => {
+    expect(plan(150, { slamIn: true, entryCut: 'whip' })[0].entry).toBe('whip');
+    expect(plan(150, { sweepIn: true, entryCut: 'crashZoom' })[0].entry).toBe('crashZoom');
+  });
+  it('exitCut sets the last shot only', () => {
+    const shots = plan(400, { exitCut: 'whipUp' });
+    expect(shots.length).toBeGreaterThan(1);
+    expect(shots[shots.length - 1].exitCut).toBe('whipUp');
+    shots.slice(0, -1).forEach((sh) => expect(sh.exitCut).toBeUndefined());
+  });
+  it('exitCut plays the outgoing whipUp half', () => {
+    const shots = plan(150, { focal: null, whiskOut: false, exitCut: 'whipUp' });
+    expect(shotFrameAt(shots, 149, null).blurY).toBeGreaterThan(0);
+    expect(shotFrameAt(shots, 150 - WHIP_FRAMES - 1, null).blurY).toBe(0);
+  });
+  it('exitCut never combines with sweepOut/whiskOut', () => {
+    const last = plan(150, { sweepOut: true, whiskOut: true, exitCut: 'whip' }).slice(-1)[0];
+    expect(last.sweepOut).toBe(false);
+    expect(last.whiskOut).toBe(false);
   });
 });

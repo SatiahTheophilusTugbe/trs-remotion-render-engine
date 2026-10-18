@@ -25,6 +25,8 @@ export type Shot = {
   moveShift: number;
   /** Group pan reveal (groupPan): set only on the wide shots of a group box wider than the strip. */
   pan?: ShotPan;
+  /** Last shot of a visual segment that cuts to the next visual: plays the outgoing half of this cut. */
+  exitCut?: InnerCut;
 };
 /**
  * A horizontal pan across a group box (owner, 2026-10-12). The visible window's centre, in image-width
@@ -50,6 +52,13 @@ export type PlanOptions = {
    */
   sweepIn?: boolean;
   sweepOut?: boolean;
+  /**
+   * Named-subject visuals (2026-10-17): a beat shows several images in turn, each planned as its own
+   * segment. entryCut overrides the first shot's entry; exitCut makes the last shot play the outgoing
+   * half of the cut into the next visual (and replaces any whisk / sweep out).
+   */
+  entryCut?: InnerCut;
+  exitCut?: InnerCut;
 };
 
 export const WIDE_SCALE = 1.04; // not 1.0: leaves overscan for the slam overshoot and micro-shake
@@ -496,7 +505,7 @@ export const planShots = (durationInFrames: number, fps: number, opts: PlanOptio
     const pool = INNER_CUTS.filter((c) => c !== cuts[cuts.length - 1]);
     cuts.push(pool[Math.floor(mulberry32(opts.seed * 31 + i) * pool.length) % pool.length]);
   }
-  const firstEntry: ShotEntry = opts.sweepIn ? 'sweep' : opts.slamIn ? 'slam' : 'none';
+  const firstEntry: ShotEntry = opts.entryCut ?? (opts.sweepIn ? 'sweep' : opts.slamIn ? 'slam' : 'none');
   const sweepOut = !!opts.sweepOut;
   // Step 2 through the 5-move pool so consecutive shots never repeat a move.
   const moveStart = Math.floor(mulberry32(opts.seed + 7919) * HOLD_MOVES.length) % HOLD_MOVES.length;
@@ -546,6 +555,12 @@ export const planShots = (durationInFrames: number, fps: number, opts: PlanOptio
       moveScale: isDrift(move) ? b.driftScale : b.moveScale,
       moveShift: b.moveShift,
     });
+  }
+  if (opts.exitCut && shots.length) {
+    const last = shots[shots.length - 1];
+    last.exitCut = opts.exitCut;
+    last.whiskOut = false;
+    last.sweepOut = false;
   }
   return shots;
 };
