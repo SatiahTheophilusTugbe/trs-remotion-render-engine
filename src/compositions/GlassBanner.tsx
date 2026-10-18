@@ -6,7 +6,7 @@
 // text reveal. Adapted to portrait 1080x1920, TRS lime accent, Montserrat, auto-fitted headline.
 // Placement: TOP of the frame, just below the brand-badge row (badges occupy y 0..~60). Card height
 // is bounded (<= 420px, see lib/glassBanner.ts) so it never reaches the vertical middle, the
-// captions (bottom:220) or the avatar corner box.
+// captions (bottom:640) or the avatar corner box.
 // The card is dark enough to read WITHOUT backdrop-filter (semi-opaque glass gradient + border +
 // sheen), so it degrades safely if a renderer ignores backdrop-filter.
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';

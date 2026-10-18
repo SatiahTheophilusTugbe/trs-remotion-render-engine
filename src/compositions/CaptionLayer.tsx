@@ -5,7 +5,9 @@ import { montserratBold } from '../lib/fonts';
 
 // Design decision 1: avatar beats put captions above the 324x573 corner avatar box.
 export const CAPTIONS_ON_AVATAR = true;
-export const CAPTION_BOTTOM = { broll: 220, avatar: 640 } as const;
+// Same height on every beat (owner 2026-10-18): the mobile feed preview crops the lower part of the frame, so
+// captions at bottom 220 on photo beats were hidden until the reel was opened.
+export const CAPTION_BOTTOM = { broll: 640, avatar: 640 } as const;
 
 export const CaptionLayer: React.FC<{ words: WordTiming[]; variant: 'avatar' | 'broll' }> = ({
   words,
