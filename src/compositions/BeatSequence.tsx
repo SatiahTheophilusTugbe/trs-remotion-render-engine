@@ -67,7 +67,7 @@ export const BeatSequence: React.FC<{
                 <>
                   {renderBeat(beat, fps, motion)}
                   {beat.type === 'broll' && beat.overlay_text ? <GlassBanner text={beat.overlay_text} /> : null}
-                  {beat.photo_credit ? (
+                  {beat.photo_credit && !beat.visuals?.length ? (
                     <PhotoCredit
                       credit={beat.photo_credit}
                       variant={beat.type === 'avatar' ? 'avatar' : 'broll'}
