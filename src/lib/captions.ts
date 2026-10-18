@@ -23,11 +23,26 @@ export const parseWordTimings = (raw: unknown): WordTiming[] => {
   );
 };
 
+// The brand sign-off ends the last beat. It gets its own caption page (owner 2026-10-18: "its own line where it
+// has breathing space"); the audio has a pause before it, so the page appears after a short blank.
+export const SIGN_OFF_WORDS = ['this', 'is', 'third', 'rail', 'sports', 'sport', 'decoded'];
+const bare = (w: string) => w.toLowerCase().replace(/[^a-z]/g, '');
+
+export const signOffStart = (words: WordTiming[]): number => {
+  const n = SIGN_OFF_WORDS.length;
+  if (words.length < n) return -1;
+  const from = words.length - n;
+  return words.slice(from).every((w, i) => bare(w.word) === SIGN_OFF_WORDS[i]) ? from : -1;
+};
+
 export const pageWords = (words: WordTiming[], perPage = WORDS_PER_PAGE): WordTiming[][] => {
+  const cut = signOffStart(words);
+  const body = cut >= 0 ? words.slice(0, cut) : words;
   const pages: WordTiming[][] = [];
-  for (let i = 0; i < words.length; i += perPage) {
-    pages.push(words.slice(i, i + perPage));
+  for (let i = 0; i < body.length; i += perPage) {
+    pages.push(body.slice(i, i + perPage));
   }
+  if (cut >= 0) pages.push(words.slice(cut));
   return pages;
 };
 

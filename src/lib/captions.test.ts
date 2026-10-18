@@ -54,6 +54,26 @@ describe('pageWords', () => {
   it('returns [] for no words', () => {
     expect(pageWords([])).toEqual([]);
   });
+  it('the sign-off is its own caption page, apart from the wrap-up line (owner 2026-10-18)', () => {
+    const seq = ['to', 'a', 'four-time', 'champion.', 'This', 'is', 'Third', 'Rail', 'Sports.', 'Sport.', 'Decoded.'];
+    const w = seq.map((word, i) => ({ word, start: i * 0.3 + (i >= 4 ? 1 : 0), end: i * 0.3 + 0.25 + (i >= 4 ? 1 : 0) }));
+    expect(pageWords(w).map((p) => p.map((x) => x.word).join(' '))).toEqual([
+      'to a four-time champion.',
+      'This is Third Rail Sports. Sport. Decoded.',
+    ]);
+  });
+  it('sign-off match ignores case and punctuation, and only at the end of the beat', () => {
+    const seq = ['this', 'is', 'third', 'rail', 'sports,', 'sport', 'decoded'];
+    const w = seq.map((word, i) => ({ word, start: i, end: i + 0.5 }));
+    expect(pageWords(w).map((p) => p.length)).toEqual([7]);
+    const mid = [...seq, 'more'].map((word, i) => ({ word, start: i, end: i + 0.5 }));
+    expect(pageWords(mid).map((p) => p.length)).toEqual([4, 4]);
+  });
+  it('words before the sign-off still page in fours', () => {
+    const seq = ['a', 'b', 'c', 'd', 'e', 'This', 'is', 'Third', 'Rail', 'Sports.', 'Sport.', 'Decoded.'];
+    const w = seq.map((word, i) => ({ word, start: i, end: i + 0.5 }));
+    expect(pageWords(w).map((p) => p.length)).toEqual([4, 1, 7]);
+  });
 });
 
 describe('pageAt', () => {
