@@ -109,7 +109,7 @@ export const formatPhotoError = (
 
 export type PutObjectFn = (args: { key: string; body: Uint8Array; contentType: string }) => Promise<void>;
 export type RehostBeat = { photo_url?: string | null; beat_index: number; photo_w?: number; photo_h?: number };
-export type RehostResult<T> = { ok: true; beats: T[] } | { ok: false; errors: string[] };
+export type RehostResult<T> = { ok: true; beats: T[]; warnings: string[] } | { ok: false; errors: string[] };
 export type ResolveFn = (hostname: string) => Promise<string[]>;
 
 type FetchOutcome = { ok: true; url: string; dims: ImageDims | null } | { ok: false; error: string };
@@ -330,9 +330,13 @@ async function rehostOne(
 }
 
 /**
- * Re-hosts every beat's photo. All-or-nothing: if any photo fails, returns every failure and the
- * caller must not render (no fallback to the original URL). A global deadline (budgetMs) makes the
- * remaining photos fail fast with reason `timeout` so the function never outlives its time limit.
+ * Re-hosts every beat's photo and visual. Never falls back to an original URL. An image that cannot be
+ * fetched no longer stops the render (owner 2026-10-18: no stopping because of an image): a failed visual is
+ * dropped (a split keeps its other half), a failed beat photo takes the beat's first surviving visual, else the
+ * nearest beat's re-hosted photo (with that photo's credit and subject box). Each failure is reported in
+ * `warnings`. Only when no photo at all could be re-hosted does it fail with every error. A global deadline
+ * (budgetMs) makes the remaining photos fail fast with reason `timeout` so the function never outlives its
+ * time limit.
  */
 export async function rehostPhotos<T extends RehostBeat>(
   beats: T[],
@@ -400,6 +404,7 @@ export async function rehostPhotos<T extends RehostBeat>(
   });
 
   const errors: string[] = [];
+  const hosted = new Set<string>();
   let next = 0;
   const worker = async () => {
     for (;;) {
@@ -417,12 +422,75 @@ export async function rehostPhotos<T extends RehostBeat>(
         { fetchFn: deps.fetchFn, put: deps.put, resolve },
         Math.min(FETCH_TIMEOUT_MS, deadline - Date.now()),
       );
-      if (r.ok) uses.forEach((u) => u.apply(r.url, r.dims));
-      else errors.push(r.error);
+      if (r.ok) {
+        uses.forEach((u) => u.apply(r.url, r.dims));
+        hosted.add(r.url);
+      } else errors.push(r.error);
     }
   };
   const n = Math.max(1, Math.min(deps.concurrency ?? REHOST_CONCURRENCY, entries.length));
   await Promise.all(Array.from({ length: n }, worker));
-  const failed = errors;
-  return failed.length ? { ok: false, errors: failed } : { ok: true, beats: out };
+  if (!errors.length) return { ok: true, beats: out, warnings: [] };
+  return repairFailures(out, hosted, errors);
+}
+
+type Visual = Record<string, unknown>;
+const B_FIELDS = ['url', 'focal', 'credit', 'photo_w', 'photo_h'] as const;
+
+// Keeps only re-hosted images. A split whose one half failed becomes a single of the other half.
+const repairVisuals = (vs: Visual[], hosted: Set<string>): Visual[] => {
+  const kept: Visual[] = [];
+  for (const v of vs) {
+    const okA = typeof v.url === 'string' && hosted.has(v.url);
+    const okB = typeof v.url_b === 'string' && hosted.has(v.url_b);
+    const single = { ...v, layout: 'single' } as Visual;
+    for (const f of B_FIELDS) delete single[f + '_b'];
+    if (okA && (okB || v.layout !== 'split')) kept.push(v);
+    else if (okA) kept.push(single);
+    else if (okB) {
+      for (const f of B_FIELDS) {
+        if (v[f + '_b'] !== undefined) single[f] = v[f + '_b'];
+        else delete single[f];
+      }
+      kept.push(single);
+    }
+  }
+  if (kept.length) kept[0] = { ...kept[0], at_sec: 0 };
+  return kept;
+};
+
+function repairFailures<T extends RehostBeat>(beats: T[], hosted: Set<string>, errors: string[]): RehostResult<T> {
+  type Meta = RehostBeat & { visuals?: Visual[]; photo_credit?: unknown; focal?: unknown };
+  const bs = beats as (T & Meta)[];
+  const okPhoto = (b: Meta) => typeof b.photo_url === 'string' && hosted.has(b.photo_url);
+  const donors = bs.map((b) => (okPhoto(b) ? { ...b } : null));
+  for (const b of bs) {
+    if (Array.isArray(b.visuals)) {
+      const vs = repairVisuals(b.visuals, hosted);
+      if (vs.length) b.visuals = vs;
+      else delete b.visuals;
+    }
+  }
+  for (let i = 0; i < bs.length; i++) {
+    const b = bs[i];
+    if (okPhoto(b)) continue;
+    const v = b.visuals?.[0];
+    if (v && typeof v.url === 'string') {
+      b.photo_url = v.url;
+      b.photo_credit = v.credit;
+      b.focal = v.focal;
+      b.photo_w = v.photo_w as number | undefined;
+      b.photo_h = v.photo_h as number | undefined;
+      continue;
+    }
+    let donor: Meta | null = null;
+    for (let d = 1; d < bs.length && !donor; d++) donor = donors[i - d] ?? donors[i + d] ?? null;
+    if (!donor) return { ok: false, errors };
+    b.photo_url = donor.photo_url;
+    b.photo_credit = donor.photo_credit;
+    b.focal = donor.focal;
+    b.photo_w = donor.photo_w;
+    b.photo_h = donor.photo_h;
+  }
+  return { ok: true, beats: bs, warnings: errors };
 }

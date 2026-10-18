@@ -185,10 +185,12 @@ describe('global deadline', () => {
       concurrency: 1,
       budgetMs: 50,
     });
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.errors.length).toBeGreaterThanOrEqual(3);
-    expect(r.errors.every((e) => e.includes('status=timeout'))).toBe(true);
+    // Photos re-hosted before the deadline stand in for the ones that timed out (no stopping for an image).
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.warnings.length).toBeGreaterThanOrEqual(3);
+    expect(r.warnings.every((e) => e.includes('status=timeout'))).toBe(true);
     expect(f.mock.calls.length).toBeLessThan(6);
+    expect(r.beats.every((b) => String(b.photo_url).startsWith('https://s3.'))).toBe(true);
   });
 });

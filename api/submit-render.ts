@@ -96,7 +96,7 @@ export async function POST(request: Request): Promise<Response> {
       ...(framesPerLambda !== undefined ? { framesPerLambda } : {}),
       ...(webhook ? { webhook } : {}),
     });
-    return Response.json({ render_id: renderId, bucket_name: bucketName, warnings: validation.warnings, webhook: !!webhook });
+    return Response.json({ render_id: renderId, bucket_name: bucketName, warnings: [...validation.warnings, ...rehost.warnings], webhook: !!webhook });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return Response.json(

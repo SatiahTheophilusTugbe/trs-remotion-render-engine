@@ -177,18 +177,42 @@ describe('rehostPhotos', () => {
       'status=timeout',
     ],
   ];
-  it.each(failCases)('fails whole batch on %s, never leaks the URL', async (_n, make, expected) => {
+  it.each(failCases)('an unreachable photo (%s) borrows the nearest beat photo, warns, never leaks the URL', async (_n, make, expected) => {
     let call = 0;
     const fetchFn = (async () => (call++ === 1 ? make() : img())) as unknown as typeof fetch;
     const put = vi.fn().mockResolvedValue(undefined);
     const r = await rehostPhotos(beats, 'rid', { fetchFn, put, concurrency: 1, resolve: pub });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain(expected);
+    expect(r.warnings[0]).toContain('beat 11 (position 1)');
+    expect(r.warnings[0]).toContain('host=p1.example.invalid');
+    expect(r.warnings.join()).not.toMatch(/SECRET|token|https?:/);
+    // never the original URL: the failed beat shows the previous beat's re-hosted photo
+    expect(r.beats[1].photo_url).toBe(r.beats[0].photo_url);
+    expect(r.beats.map((b) => b.photo_url).join()).not.toMatch(/example\.invalid/);
+  });
+
+  it('a borrowed photo brings its own credit and subject box, never those of the failed photo', async () => {
+    const withMeta = [
+      { beat_index: 0, photo_url: 'https://a.example.invalid/1.jpg', photo_credit: 'A', focal: { x: 0.2, y: 0.2 } },
+      { beat_index: 1, photo_url: 'https://dead.example.invalid/2.jpg', photo_credit: 'Dead', focal: { x: 0.9, y: 0.9 } },
+    ];
+    const fetchFn = (async (u: string) => (String(u).includes('dead') ? new Response('', { status: 404 }) : img())) as unknown as typeof fetch;
+    const r = await rehostPhotos(withMeta, 'rid', { fetchFn, put: async () => {}, resolve: pub });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.beats[1].photo_credit).toBe('A');
+    expect(r.beats[1].focal).toEqual({ x: 0.2, y: 0.2 });
+  });
+
+  it('fails only when no photo at all could be fetched', async () => {
+    const fetchFn = (async () => new Response('', { status: 404 })) as unknown as typeof fetch;
+    const r = await rehostPhotos(beats, 'rid', { fetchFn, put: async () => {}, resolve: pub });
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.errors).toHaveLength(1);
-    expect(r.errors[0]).toContain(expected);
-    expect(r.errors[0]).toContain('beat 11 (position 1)');
-    expect(r.errors[0]).toContain('host=p1.example.invalid');
-    expect(r.errors.join()).not.toMatch(/SECRET|token|https?:/);
+    expect(r.errors).toHaveLength(3);
   });
 
   it('upload failure fails the batch', async () => {
@@ -240,15 +264,39 @@ describe('rehostPhotos visuals', () => {
     expect(keys).toContain('assets/rid/0-1b.jpg');
   });
 
-  it('an unreachable visual url fails like a photo_url does', async () => {
+  it('an unreachable half of a split card leaves a single image of the other half', async () => {
     const fetchFn = vi.fn(async (u: string) =>
       String(u).includes('q.example') ? new Response('', { status: 404 }) : img(),
     ) as unknown as typeof fetch;
+    const b = beat();
+    b.visuals![1].focal_b = { x: 0.3, y: 0.3 };
+    b.visuals![1].credit_b = 'R';
+    const r = await rehostPhotos([b], 'rid', { fetchFn, put: async () => {}, resolve: pub });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.warnings.join(' ')).toContain('visuals[1].url');
+    expect(r.warnings.join(' ')).not.toContain('example.invalid/b.jpg');
+    const v = r.beats[0].visuals!;
+    expect(v).toHaveLength(2);
+    expect(v[1].layout).toBe('single');
+    expect(String(v[1].url)).toMatch(/^https:\/\/s3\./);
+    expect(v[1].url_b).toBeUndefined();
+    expect(v[1].focal).toEqual({ x: 0.3, y: 0.3 });
+    expect(v[1].credit).toBe('R');
+  });
+
+  it('an unreachable single visual is dropped; the next one starts the beat', async () => {
+    const fetchFn = vi.fn(async (u: string) =>
+      String(u).includes('hero') ? new Response('', { status: 404 }) : img(),
+    ) as unknown as typeof fetch;
     const r = await rehostPhotos([beat()], 'rid', { fetchFn, put: async () => {}, resolve: pub });
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.errors.join(' ')).toContain('visuals[1].url');
-    expect(r.errors.join(' ')).not.toContain('example.invalid/b.jpg');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const v = r.beats[0].visuals!;
+    expect(v).toHaveLength(1);
+    expect(v[0].at_sec).toBe(0);
+    // the beat photo (same url as the dropped visual) becomes the first surviving visual's image
+    expect(r.beats[0].photo_url).toBe(v[0].url);
   });
 
   it('identical urls are fetched once', async () => {
