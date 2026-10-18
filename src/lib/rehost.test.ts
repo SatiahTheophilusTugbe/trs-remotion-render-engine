@@ -201,3 +201,59 @@ describe('rehostPhotos', () => {
     expect(r.errors.join()).not.toMatch(/SECRET|AccessDenied/);
   });
 });
+
+describe('rehostPhotos visuals', () => {
+  type VB = RehostBeat & { visuals?: Record<string, unknown>[] };
+  const beat = (): VB => ({
+    beat_index: 3,
+    photo_url: 'https://p.example.invalid/hero.jpg',
+    visuals: [
+      { url: 'https://p.example.invalid/hero.jpg', at_sec: 0, layout: 'single' },
+      { url: 'https://q.example.invalid/b.jpg', at_sec: 4, layout: 'split', url_b: 'https://r.example.invalid/c.jpg' },
+    ],
+  });
+
+  it('rehosts visual urls and sets dims', async () => {
+    const png = new Uint8Array(33);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    new DataView(png.buffer).setUint32(16, 1200);
+    new DataView(png.buffer).setUint32(20, 800);
+    const fetchFn = vi.fn(async () => imgBytes('image/png', png)) as unknown as typeof fetch;
+    const r = await rehostPhotos([beat()], 'rid', { fetchFn, put: async () => {}, resolve: pub });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const v = r.beats[0].visuals!;
+    expect(v[0].url).toBe(r.beats[0].photo_url);
+    expect(String(v[1].url)).toMatch(/^https:\/\/s3\./);
+    expect(String(v[1].url_b)).toMatch(/^https:\/\/s3\./);
+    expect(v[1].photo_w).toBe(1200);
+    expect(v[1].photo_h_b).toBe(800);
+  });
+
+  it('object keys are unique per visual', async () => {
+    const put = vi.fn().mockResolvedValue(undefined);
+    const fetchFn = vi.fn(async () => img('image/jpeg')) as unknown as typeof fetch;
+    await rehostPhotos([beat()], 'rid', { fetchFn, put, resolve: pub });
+    const keys = put.mock.calls.map((c) => c[0].key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toContain('assets/rid/0-1.jpg');
+    expect(keys).toContain('assets/rid/0-1b.jpg');
+  });
+
+  it('an unreachable visual url fails like a photo_url does', async () => {
+    const fetchFn = vi.fn(async (u: string) =>
+      String(u).includes('q.example') ? new Response('', { status: 404 }) : img(),
+    ) as unknown as typeof fetch;
+    const r = await rehostPhotos([beat()], 'rid', { fetchFn, put: async () => {}, resolve: pub });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.join(' ')).toContain('visuals[1].url');
+    expect(r.errors.join(' ')).not.toContain('example.invalid/b.jpg');
+  });
+
+  it('identical urls are fetched once', async () => {
+    const fetchFn = vi.fn(async () => img()) as unknown as typeof fetch;
+    await rehostPhotos([beat()], 'rid', { fetchFn, put: async () => {}, resolve: pub });
+    expect(vi.mocked(fetchFn).mock.calls.length).toBe(3);
+  });
+});

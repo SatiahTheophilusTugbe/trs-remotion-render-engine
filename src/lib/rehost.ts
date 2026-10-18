@@ -83,8 +83,9 @@ export function sniffImageType(bytes: Uint8Array): string | null {
 
 export const withinSizeCap = (bytes: number): boolean => bytes > 0 && bytes <= MAX_PHOTO_BYTES;
 
-export const objectKey = (renderId: string, position: number, ext: string): string =>
-  `assets/${renderId}/${position}.${ext}`;
+// slot names a visual inside the beat ("1", "1b" for a split's second image); absent for photo_url.
+export const objectKey = (renderId: string, position: number, ext: string, slot?: string): string =>
+  `assets/${renderId}/${position}${slot === undefined ? '' : '-' + slot}.${ext}`;
 
 export const publicUrl = (key: string): string =>
   `https://s3.${REHOST_REGION}.amazonaws.com/${REHOST_BUCKET}/${key}`;
@@ -293,17 +294,13 @@ export async function readCapped(res: Response): Promise<Uint8Array> {
 
 async function rehostOne(
   url: string,
-  beatIndex: number,
-  position: number,
-  renderId: string,
+  keyFor: (ext: string) => string,
+  errorFor: (host: string, reason: string | number) => string,
   deps: { fetchFn: typeof fetch; put: PutObjectFn; resolve: ResolveFn },
   timeoutMs: number,
 ): Promise<FetchOutcome> {
   const host = hostOf(url);
-  const fail = (reason: string | number): FetchOutcome => ({
-    ok: false,
-    error: formatPhotoError(beatIndex, position, host, reason),
-  });
+  const fail = (reason: string | number): FetchOutcome => ({ ok: false, error: errorFor(host, reason) });
   if (timeoutMs <= 0) return fail('timeout');
   let bytes: Uint8Array;
   let mime: string;
@@ -323,7 +320,7 @@ async function rehostOne(
     const name = err instanceof Error ? err.name : '';
     return fail(name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'network_error');
   }
-  const key = objectKey(renderId, position, extForContentType(mime)!);
+  const key = keyFor(extForContentType(mime)!);
   try {
     await deps.put({ key, body: bytes, contentType: mime });
   } catch {
@@ -348,38 +345,84 @@ export async function rehostPhotos<T extends RehostBeat>(
     budgetMs?: number;
   },
 ): Promise<RehostResult<T>> {
-  const out: T[] = beats.map((b) => ({ ...b }));
-  const errors: (string | undefined)[] = new Array(beats.length).fill(undefined);
+  const out: T[] = beats.map((b) => {
+    const c = { ...b } as T & { visuals?: unknown };
+    const vs = (b as { visuals?: unknown }).visuals;
+    if (Array.isArray(vs)) c.visuals = vs.map((v) => ({ ...(v as object) }));
+    return c;
+  });
   const resolve = deps.resolve ?? defaultResolve;
   const deadline = Date.now() + (deps.budgetMs ?? GLOBAL_BUDGET_MS);
+
+  // Each beat's photo_url is its own job (unchanged behaviour). A visual url / url_b joins any existing
+  // job for the same URL, so a visual repeating its beat's photo_url is fetched once.
+  type Use = { apply: (url: string, dims: ImageDims | null) => void; slot?: string; position: number; beatIndex: number; label: string };
+  const entries: [string, Use[]][] = [];
+  const byUrl = new Map<string, Use[]>();
+  const addUse = (url: unknown, use: Use, share: boolean) => {
+    if (typeof url !== 'string' || url === '') return;
+    const existing = share ? byUrl.get(url) : undefined;
+    if (existing) {
+      existing.push(use);
+      return;
+    }
+    const list = [use];
+    entries.push([url, list]);
+    if (!byUrl.has(url)) byUrl.set(url, list);
+  };
+  out.forEach((b, i) => {
+    addUse(b.photo_url, {
+      position: i, beatIndex: b.beat_index, label: '',
+      apply: (url, dims) => {
+        b.photo_url = url;
+        // The shot engine needs each photo's aspect ratio to keep a cropped subject on screen.
+        if (dims) {
+          b.photo_w = dims.width;
+          b.photo_h = dims.height;
+        }
+      },
+    }, false);
+    const vs = (b as { visuals?: Record<string, unknown>[] }).visuals;
+    (vs ?? []).forEach((v, j) => {
+      for (const sfx of ['', '_b'] as const) {
+        addUse(v['url' + sfx], {
+          position: i, beatIndex: b.beat_index, slot: `${j}${sfx ? 'b' : ''}`, label: `visuals[${j}].url${sfx}`,
+          apply: (url, dims) => {
+            v['url' + sfx] = url;
+            if (dims) {
+              v['photo_w' + sfx] = dims.width;
+              v['photo_h' + sfx] = dims.height;
+            }
+          },
+        }, true);
+      }
+    });
+  });
+
+  const errors: string[] = [];
   let next = 0;
   const worker = async () => {
     for (;;) {
-      const i = next++;
-      if (i >= beats.length) return;
-      const url = beats[i].photo_url;
-      if (typeof url !== 'string' || url === '') continue;
+      const k = next++;
+      if (k >= entries.length) return;
+      const [url, uses] = entries[k];
+      const first = uses[0];
       const r = await rehostOne(
         url,
-        beats[i].beat_index,
-        i,
-        renderId,
+        (ext) => objectKey(renderId, first.position, ext, first.slot),
+        (host, reason) =>
+          first.label
+            ? `beat ${first.beatIndex} (position ${first.position}): ${first.label} could not be fetched (host=${host}, status=${reason})`
+            : formatPhotoError(first.beatIndex, first.position, host, reason),
         { fetchFn: deps.fetchFn, put: deps.put, resolve },
         Math.min(FETCH_TIMEOUT_MS, deadline - Date.now()),
       );
-      if (r.ok) {
-        out[i].photo_url = r.url;
-        // The shot engine needs each photo's aspect ratio to keep a cropped subject on screen.
-        if (r.dims) {
-          out[i].photo_w = r.dims.width;
-          out[i].photo_h = r.dims.height;
-        }
-      }
-      else errors[i] = r.error;
+      if (r.ok) uses.forEach((u) => u.apply(r.url, r.dims));
+      else errors.push(r.error);
     }
   };
-  const n = Math.max(1, Math.min(deps.concurrency ?? REHOST_CONCURRENCY, beats.length));
+  const n = Math.max(1, Math.min(deps.concurrency ?? REHOST_CONCURRENCY, entries.length));
   await Promise.all(Array.from({ length: n }, worker));
-  const failed = errors.filter((e): e is string => e !== undefined);
+  const failed = errors;
   return failed.length ? { ok: false, errors: failed } : { ok: true, beats: out };
 }
