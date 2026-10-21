@@ -22,6 +22,7 @@ import { G0 } from './grades';
 import type { Grade } from './grades';
 import type { GradeDisable } from './types';
 
+import { captionPlacement } from '../../lib/captionPlacement';
 const GradeContext = createContext<Grade>(G0);
 export const GradeProvider = GradeContext.Provider;
 export const useGrade = (): Grade => useContext(GradeContext);
@@ -129,7 +130,7 @@ export const GradedBeatSequence: React.FC<{ beats: Beat[]; leagueBadge?: string 
             <GradedBeat beat={beat} fps={fps} />
             {beat.type === 'broll' && beat.overlay_text ? <GlassBanner text={beat.overlay_text} /> : null}
             {showCaptions ? (
-              <CaptionLayer words={words} variant={beat.type === 'avatar' ? 'avatar' : 'broll'} />
+              <CaptionLayer words={words} placement={captionPlacement(beat)} />
             ) : null}
           </>
         );

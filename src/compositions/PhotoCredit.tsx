@@ -4,7 +4,7 @@ import { creditProgress } from '../lib/creditMotion';
 
 // Small on-screen source credit, shown while its photo is on screen (owner, 2026-10-03), so the
 // published captions no longer need a long "Photos:" line. Left side, just above the captions
-// (owner): captions start at bottom 640 on every beat (2026-10-18) and run up to two 60px lines, so the
+// (owner): captions hang from top 1300 or lower (lib/captionPlacement.ts, 2026-10-20), so the
 // credit sits above that block, clear of the platforms' bottom-left overlay and right-hand rail.
 // It slides in from the left after the photo lands and back out the same way before it leaves.
 export const CREDIT_BOTTOM = { broll: 820, avatar: 820 } as const;

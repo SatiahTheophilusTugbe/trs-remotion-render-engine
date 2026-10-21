@@ -11,6 +11,7 @@ import { BrandBadges } from './BrandBadges';
 import { MusicBed } from './MusicBed';
 import { speechRanges } from '../lib/music';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from './CaptionLayer';
+import { captionPlacement } from '../lib/captionPlacement';
 import { TransitionLayer } from './TransitionLayer';
 import { PhotoCredit } from './PhotoCredit';
 import { cutStyleFor, wipeCutFrames } from '../lib/cuts';
@@ -77,7 +78,7 @@ export const BeatSequence: React.FC<{
                   {(() => {
                     const words = parseWordTimings(beat.word_timings);
                     const show = words.length > 0 && (beat.type !== 'avatar' || CAPTIONS_ON_AVATAR);
-                    return show ? <CaptionLayer words={words} variant={beat.type === 'avatar' ? 'avatar' : 'broll'} /> : null;
+                    return show ? <CaptionLayer words={words} placement={captionPlacement(beat)} /> : null;
                   })()}
                 </>
               );

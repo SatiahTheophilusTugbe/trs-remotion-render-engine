@@ -12,6 +12,7 @@ import { GRADES } from './grades';
 import { GradeProvider, GradedAvatarBox, GradedPhoto } from './GradedBeats';
 import type { GradeMedia, GradeProps } from './types';
 
+import { AVATAR_BOX, CAPTION_TOP } from '../../lib/captionPlacement';
 export const LOCAL_FRAME = 30;
 export type CellKind = 'photo' | 'avatarFull' | 'wipe';
 export type CellRow = {
@@ -50,13 +51,13 @@ const Cell: React.FC<{ row: CellRow; props: GradeProps }> = ({ row, props }) => 
         <>
           <GradedAvatarBox clipUrl={props.media.avatarClipStandin ?? ''} />
           <GlassBanner text={bannerText} />
-          <CaptionLayer words={wordsFor(props, 'avatar')} variant="avatar" />
+          <CaptionLayer words={wordsFor(props, 'avatar')} placement={{ top: CAPTION_TOP, left: 60, right: AVATAR_BOX.width + 40 }} />
           <BrandBadges leagueBadge="NBA" />
         </>
       ) : null}
       {row.kind === 'wipe' ? (
         <>
-          <CaptionLayer words={wordsFor(props, 'broll')} variant="broll" />
+          <CaptionLayer words={wordsFor(props, 'broll')} placement={{ top: CAPTION_TOP, left: 60, right: 60 }} />
           <TransitionLayer cuts={[LOCAL_FRAME - 2]} />
           <BrandBadges leagueBadge="NBA" />
         </>

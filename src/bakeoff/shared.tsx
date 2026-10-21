@@ -6,6 +6,7 @@ import { BrollBeat } from '../compositions/BrollBeat';
 import { StatRevealBeat } from '../compositions/StatRevealBeat';
 import { OverlayBanner } from './OverlayBanner';
 import { CaptionLayer, CAPTIONS_ON_AVATAR } from '../compositions/CaptionLayer';
+import { captionPlacement } from '../lib/captionPlacement';
 import { BrandBadges } from '../compositions/BrandBadges';
 import { MusicBed } from '../compositions/MusicBed';
 import { parseWordTimings } from '../lib/captions';
@@ -27,7 +28,7 @@ export const BeatContent: React.FC<{ beat: Beat; banner?: boolean }> = ({ beat, 
       {beat.type === 'broll' ? <BrollBeat beat={beat} fps={FPS} /> : null}
       {beat.type === 'stat' ? <StatRevealBeat beat={beat} /> : null}
       {banner && beat.type === 'broll' && beat.overlay_text ? <OverlayBanner text={beat.overlay_text} /> : null}
-      {showCaptions ? <CaptionLayer words={words} variant={beat.type === 'avatar' ? 'avatar' : 'broll'} /> : null}
+      {showCaptions ? <CaptionLayer words={words} placement={captionPlacement(beat)} /> : null}
     </AbsoluteFill>
   );
 };
